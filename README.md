@@ -171,27 +171,48 @@ claude settings set hooks.Stop '[{"command": "~/knowledge-base/scripts/session-h
 
 ## Inspiration & Credits
 
-This project is a concrete implementation of ideas from several sources:
+Neuron is a concrete implementation that merges ideas from several sources. Each link below is worth reading on its own — Neuron brings them together into one system.
 
-### Primary Inspiration
+### The Original Blueprint
 
-- **[Andrej Karpathy — LLM Knowledge Bases](https://x.com/karpathy/status/2039805659525644595)** (Apr 2, 2026) — The core pattern: raw data → LLM-compiled wiki → Q&A + linting loop. "A large fraction of my recent token throughput is going less into manipulating code, and more into manipulating knowledge." This tweet is the blueprint this project implements.
+- **[Andrej Karpathy — LLM Knowledge Bases](https://x.com/karpathy/status/2039805659525644595)** (Apr 2, 2026) — The core pattern: raw data → LLM-compiled wiki → Q&A + linting loop. *"A large fraction of my recent token throughput is going less into manipulating code, and more into manipulating knowledge."* Also see his [GitHub Gist](https://gist.github.com/karpathy) for implementation notes. This is the foundation everything else builds on.
+
+### Direct Influences (the threads that shaped Neuron)
+
+- **[Allie Miller — Claudeopedia](https://x.com/alliekmiller/status/2040884878229565816)** — Extended the Karpathy pattern with a `/wiki` skill that captures screenshots and downloads, Dataview visualization dashboards, and an assumption-questioning cron job that proactively challenges your beliefs. Neuron's `neuron insights` and Dataview dashboards come directly from this.
+
+- **[Nick Spisak — LLM Knowledge Pipeline](https://x.com/NickSpisak_/status/2041012360668750229)** — Built a pipeline using yt-dlp for YouTube transcripts, [steipete's summarize CLI](https://github.com/steipete/summarize) for content compression, [tobi/qmd](https://github.com/tobi/qmd) for blazing-fast local markdown search, and a brain CLI that indexes YouTube archives, X exports, and AI agent JSONL logs. Neuron's YouTube ingestion, brain CLI architecture, and the file watcher concept come from this.
+
+- **[CyrilXBT — Second Brain System](https://x.com/cyrilXBT/status/2040988306154901742)** — A complete Obsidian-based second brain with 4-folder PARA structure (Inbox/Notes/Projects/Archive), Dataview + Templater + Canvas integration, a daily note template, a CLAUDE.md vault config, and 4 Claude workflows: Morning Briefing, Idea Development, Connection Finder, and Writing Accelerator. Neuron's folder structure, daily note template, and the 4 workflow sections come directly from this.
+
+- **[Michael Chomsky — Self-Updating KB Vision](https://x.com/michael_chomsky/status/2040946855148929499)** — A vision for auto-syncing knowledge from iMessage, email, X, and AI chats into plain observable markdown files with MCP-style access, rules-based auto-organization, and proactive life-improvement suggestions. Neuron's proactive insight generation and the philosophy of "the system should actively make you smarter" come from this.
 
 ### Architecture Influences
 
-- **[Claude Code Memory System](https://docs.anthropic.com/en/docs/claude-code)** — Anthropic's file-based memory architecture (MEMORY.md index + topic files) inspired the memory layer. This project extends it with classification, session extraction, and the compilation pipeline.
+- **[Claude Code Memory System](https://docs.anthropic.com/en/docs/claude-code)** — Anthropic's file-based memory architecture (MEMORY.md pointer index + topic files) inspired the memory layer. Neuron extends it with classification, session extraction, typed relationships, and the compilation pipeline.
 
-- **[Obsidian](https://obsidian.md/)** — The "IDE for thought" concept. Local-first, markdown-native, plugin-extensible. The knowledge base is designed as a native Obsidian vault with `[[wikilinks]]` and frontmatter-driven metadata.
+- **[Obsidian](https://obsidian.md/)** — The "IDE for thought." Local-first, markdown-native, plugin-extensible. Neuron is designed as a native Obsidian vault with `[[wikilinks]]`, frontmatter metadata, and Dataview queries. Key plugins: [Dataview](https://github.com/blacksmithgu/obsidian-dataview), [Templater](https://github.com/SilentVoid13/Templater), and the built-in Canvas.
+
+- **[Tiago Forte — Building a Second Brain](https://www.buildingasecondbrain.com/)** — The PARA method (Projects, Areas, Resources, Archive) influenced the directory structure. Neuron adapts it as: Inbox (capture) → raw (processed sources) → wiki (compiled knowledge) → Archive (completed material).
+
+### Tools Referenced
+
+| Tool | What it does | Used in Neuron |
+|------|-------------|----------------|
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | YouTube video/audio/subtitle downloader | YouTube transcript extraction |
+| [firecrawl](https://github.com/mendableai/firecrawl) | Web scraping → clean markdown | URL ingestion (preferred over curl) |
+| [ripgrep (rg)](https://github.com/BurntSushi/ripgrep) | Blazing-fast regex search | `neuron search` full-text search |
+| [tobi/qmd](https://github.com/tobi/qmd) | Fast local markdown search | Recommended for large KBs (not bundled) |
+| [steipete/summarize](https://github.com/steipete/summarize) | CLI content summarizer | Recommended for long-form content (not bundled) |
 
 ### Security Pattern
 
-- **Data Classification (NIST SP 800-60)** — The PUBLIC/PRIVATE/CONFIDENTIAL tier system is a simplified version of federal information classification. Applied here to personal knowledge management — because your notes contain API keys, project secrets, and stakeholder info whether you realize it or not.
+- **Data Classification (NIST SP 800-60)** — The PUBLIC/PRIVATE/CONFIDENTIAL tier system is a simplified version of federal information classification. Applied here because your notes will inevitably contain API keys, project secrets, and stakeholder info — whether you realize it or not.
 
-### Related Projects & Reading
+### Further Reading
 
-- [Simon Willison — "Building and using a personal knowledge base"](https://simonwillison.net/) — Pioneering work on LLM-augmented personal data management
-- [Tiago Forte — Building a Second Brain](https://www.buildingasecondbrain.com/) — The PARA method (Projects, Areas, Resources, Archive) influenced the directory structure
-- [Karpathy — follow-up on ephemeral wikis](https://x.com/karpathy/status/2039805659525644595) — "Every question to a frontier-grade LLM could spawn a team of LLMs to automate the whole thing: iteratively construct an entire ephemeral wiki, lint it, loop a few times, then write a full report."
+- [Simon Willison — LLM-augmented personal data management](https://simonwillison.net/) — Pioneering work on using LLMs to manage personal knowledge
+- [Karpathy — follow-up on ephemeral wikis](https://x.com/karpathy/status/2039805659525644595) — *"Every question to a frontier-grade LLM could spawn a team of LLMs: iteratively construct an entire ephemeral wiki, lint it, loop a few times, then write a full report."*
 
 ## Quick Start Guide
 
