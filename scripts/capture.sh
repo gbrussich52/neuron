@@ -141,7 +141,7 @@ EOF
     # Write URL to Inbox — brain CLI handles yt-dlp processing
     SLUG=$(date '+%Y-%m-%d_%H%M%S')
     echo "$URL" > "$KB_DIR/Inbox/${SLUG}_youtube.md"
-    echo "YouTube URL queued in Inbox/. Run 'brain process' to extract transcript."
+    echo "YouTube URL queued in Inbox/. Run 'neuron process' to extract transcript."
     ;;
 
   braindump|dump)
@@ -190,7 +190,7 @@ EOF
 
   help|*)
     cat <<EOF
-Claudeopedia — Knowledge Base Capture Tool
+Neuron — Knowledge Base Capture Tool
 
 Usage: capture.sh <action> [args]
 
@@ -210,7 +210,7 @@ Knowledge:
   insights                      Proactive insight generation
 
 Pipeline:
-  watch                         Watch Inbox/ and auto-process
+  watch                         Watch Inbox/ (or use `neuron watch`)
   process                       Process pending Inbox/ files
   compile                       Compile raw sources into wiki
   lint                          Run wiki health checks

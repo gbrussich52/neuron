@@ -1,10 +1,10 @@
 {
-  "name": "brain-cli",
+  "name": "neuron-cli",
   "version": "1.0.0",
-  "description": "Claudeopedia brain CLI — watches Inbox, auto-processes knowledge, surfaces insights",
+  "description": "Neuron — LLM-powered second brain CLI. Watches Inbox, auto-processes knowledge, surfaces insights.",
   "main": "brain.js",
   "bin": {
-    "brain": "./brain.js"
+    "neuron": "./brain.js"
   },
   "scripts": {
     "watch": "node brain.js watch",
@@ -12,7 +12,7 @@
     "search": "node brain.js search",
     "status": "node brain.js status"
   },
-  "keywords": ["knowledge-base", "second-brain", "claude", "obsidian"],
+  "keywords": ["knowledge-base", "second-brain", "neuron", "obsidian", "llm"],
   "author": "Giani Brussich",
   "license": "MIT",
   "type": "module"

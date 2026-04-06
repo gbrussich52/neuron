@@ -1,4 +1,4 @@
-# Claudeopedia — Vault Rules
+# Neuron — Vault Rules
 
 This is the knowledge base vault. All LLM agents (compile, lint, consolidate, insights, daily) must follow these rules.
 

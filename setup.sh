@@ -1,5 +1,5 @@
 #!/bin/bash
-# setup.sh — Install the LLM Knowledge Base
+# setup.sh — Install Neuron
 # Creates the directory structure, installs scripts, and configures automation.
 #
 # Usage:
@@ -41,8 +41,8 @@ if [[ "${1:-}" == "--uninstall" ]]; then
 fi
 
 echo ""
-echo "=== LLM Knowledge Base Installer ==="
-echo "Based on Andrej Karpathy's LLM Knowledge Base pattern"
+echo "=== Neuron Installer ==="
+echo "LLM-powered second brain — based on the Karpathy pattern"
 echo ""
 echo "Install location: $KB_DIR"
 echo ""

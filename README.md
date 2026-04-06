@@ -1,4 +1,4 @@
-# Claudeopedia
+# Neuron
 
 Your LLM-powered second brain. Drop anything in — the LLM compiles, cross-links, and maintains a living knowledge wiki. Every question compounds it. Every coding session feeds it. It proactively challenges your assumptions and surfaces what you don't know.
 
@@ -9,7 +9,7 @@ Built on the [Karpathy pattern](https://x.com/karpathy/status/203980565952564459
 ```
 You → Inbox/         Drop anything: URLs, files, YouTube links, brain dumps
         ↓
-      brain CLI       Auto-detects type, processes, routes to raw/
+      Neuron CLI       Auto-detects type, processes, routes to raw/
         ↓
       compile.sh      LLM compiles raw → wiki (concepts, summaries, wikilinks)
         ↓
@@ -23,20 +23,20 @@ You → Inbox/         Drop anything: URLs, files, YouTube links, brain dumps
 ## Features
 
 **Capture**
-- **Frictionless Inbox** — drop anything into `Inbox/`, brain CLI auto-processes (URLs, YouTube, text, PDFs, images, brain dumps)
+- **Frictionless Inbox** — drop anything into `Inbox/`, Neuron CLI auto-processes (URLs, YouTube, text, PDFs, images, brain dumps)
 - **YouTube ingestion** — yt-dlp extracts transcripts automatically
-- **Brain dump mode** — `brain braindump` accepts any unstructured text, auto-classifies and files it
+- **Brain dump mode** — `neuron braindump` accepts any unstructured text, auto-classifies and files it
 - **Single entry point** — `capture.sh` routes everything with one command
 
 **Knowledge**
 - **Living wiki** — LLM compiles raw sources into concept articles with `[[wikilinks]]` and backlinks
 - **Typed relationships** — articles linked with `supports`, `contradicts`, `supersedes` for knowledge graph clarity
 - **Incremental compilation** — only processes new/uncompiled sources (saves tokens)
-- **Full-text search** — `brain search` via ripgrep across the entire KB
+- **Full-text search** — `neuron search` via ripgrep across the entire KB
 
 **Intelligence**
-- **Proactive insights** — `brain insights` challenges assumptions, identifies knowledge gaps, finds hidden connections
-- **Daily briefing** — `brain daily` generates a morning note with what's active, open questions, and connections to explore
+- **Proactive insights** — `neuron insights` challenges assumptions, identifies knowledge gaps, finds hidden connections
+- **Daily briefing** — `neuron daily` generates a morning note with what's active, open questions, and connections to explore
 - **Session extraction** — Claude Code hook auto-captures learnings from every coding conversation
 - **Dataview dashboards** — Knowledge Evolution, Thinking Changes, Brain Dump Tracker
 
@@ -47,15 +47,15 @@ You → Inbox/         Drop anything: URLs, files, YouTube links, brain dumps
 - **Obsidian CSS badges** — green/orange/red visual indicators
 
 **Automation**
-- **File watcher** — `brain watch` monitors Inbox/ and auto-processes new files
+- **File watcher** — `neuron watch` monitors Inbox/ and auto-processes new files
 - **Weekly crons** — consolidation (Mon), compile+lint (Wed) via LaunchAgents/cron
 - **GitHub Actions CI** — classification audit on every PR
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/gbrussich52/llm-knowledge-base.git
-cd llm-knowledge-base
+git clone https://github.com/gbrussich52/neuron.git
+cd neuron
 chmod +x setup.sh
 ./setup.sh                    # Install to ~/knowledge-base/
 ./setup.sh /custom/path       # Or install to custom location
@@ -73,16 +73,16 @@ capture.sh decision "Haiku for free, Sonnet for pro"  # Decision
 capture.sh gotcha "PostgREST drops schemas" pap       # Gotcha
 capture.sh braindump                                  # Interactive brain dump
 
-# Or just drop files into ~/knowledge-base/Inbox/ — brain CLI handles the rest
+# Or just drop files into ~/knowledge-base/Inbox/ — Neuron CLI handles the rest
 
 # Brain CLI
-brain watch              # Watch Inbox/ and auto-process
-brain process            # Process all pending Inbox/ files
-brain braindump          # Interactive brain dump
-brain search "query"     # Full-text search
-brain status             # KB stats and health
-brain daily              # Generate today's daily note
-brain insights           # Proactive insight generation
+neuron watch              # Watch Inbox/ and auto-process
+neuron process            # Process all pending Inbox/ files
+neuron braindump          # Interactive brain dump
+neuron search "query"     # Full-text search
+neuron status             # KB stats and health
+neuron daily              # Generate today's daily note
+neuron insights           # Proactive insight generation
 
 # Pipeline
 capture.sh compile       # Compile raw → wiki
@@ -125,7 +125,7 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 │   ├── queries/               # Filed Q&A + proactive insights
 │   └── sessions/              # Auto-extracted session learnings  [PRIVATE]
 ├── Archive/                   # Processed inbox items, retired content
-├── brain-cli/                 # Node.js brain CLI
+├── brain-cli/                 # Node.js Neuron CLI
 ├── scripts/                   # Shell automation
 ├── templates/                 # Obsidian Templater templates
 └── CLAUDE.md                  # Vault rules for LLM agents

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * brain — Claudeopedia Brain CLI
+ * neuron — LLM-powered second brain CLI
  *
  * Watches Inbox/, auto-processes knowledge inputs, updates wiki,
  * and surfaces proactive insights.
  *
  * Commands:
- *   brain watch          — Watch Inbox/ for new files, auto-process
- *   brain process        — Process all pending Inbox/ files now
- *   brain braindump      — Interactive brain dump (stdin → Inbox/)
- *   brain search <query> — Full-text search across the entire KB
- *   brain status         — Show KB stats and health
- *   brain daily          — Generate today's daily note
- *   brain insights       — Run proactive insight generation
+ *   neuron watch          — Watch Inbox/ for new files, auto-process
+ *   neuron process        — Process all pending Inbox/ files now
+ *   neuron braindump      — Interactive brain dump (stdin → Inbox/)
+ *   neuron search <query> — Full-text search across the entire KB
+ *   neuron status         — Show KB stats and health
+ *   neuron daily          — Generate today's daily note
+ *   neuron insights       — Run proactive insight generation
  *
  * Security note: execSync is used intentionally for local CLI delegation.
  * All inputs are local file paths or user-provided search queries — no
@@ -39,8 +39,8 @@ const STATE_FILE = join(KB_DIR, 'brain-cli', '.brain-state.json');
 // ── Helpers ────────────────────────────────────────────────────
 const timestamp = () => new Date().toISOString().replace(/[T:]/g, '-').slice(0, 19);
 const dateStr = () => new Date().toISOString().slice(0, 10);
-const log = (msg) => console.log(`[brain] ${msg}`);
-const warn = (msg) => console.log(`[brain] WARNING: ${msg}`);
+const log = (msg) => console.log(`[neuron] ${msg}`);
+const warn = (msg) => console.log(`[neuron] WARNING: ${msg}`);
 
 function loadState() {
   if (existsSync(STATE_FILE)) {
@@ -330,7 +330,7 @@ function cmdStatus() {
   } catch { /* no matches */ }
 
   console.log(`
-=== Claudeopedia Status ===
+=== Neuron Status ===
 
   Inbox:         ${inboxCount} pending
   Raw sources:   ${rawCount} (${uncompiled} uncompiled)
@@ -449,7 +449,7 @@ switch (command) {
   case 'insights': cmdInsights(); break;
   default:
     console.log(`
-  brain — Claudeopedia Brain CLI
+  neuron — LLM-powered second brain
 
   Commands:
     watch          Watch Inbox/ and auto-process new files

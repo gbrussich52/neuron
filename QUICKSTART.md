@@ -3,8 +3,8 @@
 ## Install (30 seconds)
 
 ```bash
-git clone https://github.com/gbrussich52/llm-knowledge-base.git
-cd llm-knowledge-base && chmod +x setup.sh && ./setup.sh
+git clone https://github.com/gbrussich52/neuron.git
+cd neuron && chmod +x setup.sh && ./setup.sh
 ```
 
 ## Commands at a Glance
