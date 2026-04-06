@@ -1,0 +1,19 @@
+{
+  "name": "brain-cli",
+  "version": "1.0.0",
+  "description": "Claudeopedia brain CLI — watches Inbox, auto-processes knowledge, surfaces insights",
+  "main": "brain.js",
+  "bin": {
+    "brain": "./brain.js"
+  },
+  "scripts": {
+    "watch": "node brain.js watch",
+    "process": "node brain.js process",
+    "search": "node brain.js search",
+    "status": "node brain.js status"
+  },
+  "keywords": ["knowledge-base", "second-brain", "claude", "obsidian"],
+  "author": "Giani Brussich",
+  "license": "MIT",
+  "type": "module"
+}

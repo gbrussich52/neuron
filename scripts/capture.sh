@@ -135,6 +135,43 @@ EOF
     echo "Gotcha logged → $TARGET"
     ;;
 
+  youtube|yt)
+    URL="${1:?Usage: capture.sh youtube <youtube-url> [tags]}"
+    TAGS="${2:-youtube}"
+    # Write URL to Inbox — brain CLI handles yt-dlp processing
+    SLUG=$(date '+%Y-%m-%d_%H%M%S')
+    echo "$URL" > "$KB_DIR/Inbox/${SLUG}_youtube.md"
+    echo "YouTube URL queued in Inbox/. Run 'brain process' to extract transcript."
+    ;;
+
+  braindump|dump)
+    exec node "$KB_DIR/brain-cli/brain.js" braindump
+    ;;
+
+  daily)
+    exec node "$KB_DIR/brain-cli/brain.js" daily
+    ;;
+
+  insights)
+    exec node "$KB_DIR/brain-cli/brain.js" insights
+    ;;
+
+  status)
+    exec node "$KB_DIR/brain-cli/brain.js" status
+    ;;
+
+  search)
+    exec node "$KB_DIR/brain-cli/brain.js" search "$@"
+    ;;
+
+  watch)
+    exec node "$KB_DIR/brain-cli/brain.js" watch
+    ;;
+
+  process)
+    exec node "$KB_DIR/brain-cli/brain.js" process
+    ;;
+
   query)
     exec "$SCRIPTS_DIR/query.sh" "$@"
     ;;
@@ -153,30 +190,43 @@ EOF
 
   help|*)
     cat <<EOF
-Knowledge Base Capture Tool
+Claudeopedia — Knowledge Base Capture Tool
 
 Usage: capture.sh <action> [args]
 
-Actions:
-  url <url> [tags]              Ingest a web source into raw/
-  file <path> [tags]            Ingest a local file into raw/
+Capture:
+  url <url> [tags]              Ingest a web source
+  file <path> [tags]            Ingest a local file
+  youtube <url> [tags]          Ingest YouTube video transcript
   thought "text" [tags]         Capture a thought or idea
   decision "text" [project]     Log an architectural decision
   gotcha "text" [project]       Log a gotcha or trap
+  braindump                     Interactive brain dump (paste anything)
+
+Knowledge:
   query "question"              Ask a question against the wiki
+  search <query>                Full-text search across KB
+  daily                         Generate today's daily note
+  insights                      Proactive insight generation
+
+Pipeline:
+  watch                         Watch Inbox/ and auto-process
+  process                       Process pending Inbox/ files
   compile                       Compile raw sources into wiki
   lint                          Run wiki health checks
-  audit                         Run security classification audit
+  audit                         Security classification audit
+  status                        Show KB stats and health
 
 Projects: pap, ft, or omit for global
 
 Examples:
   capture.sh url https://example.com ai,ml
-  capture.sh thought "Need to add rate limiting to AI endpoint" pap
+  capture.sh youtube https://youtube.com/watch?v=abc123
+  capture.sh braindump
+  capture.sh thought "Rate limiting needs per-user quotas" pap
   capture.sh decision "Using Haiku for free tier, Sonnet for pro" pap
-  capture.sh gotcha "PostgREST schema cache needs manual reload" pap
-  capture.sh query "What are the USPAP retention requirements?"
-  capture.sh audit
+  capture.sh insights
+  capture.sh status
 EOF
     ;;
 esac

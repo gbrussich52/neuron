@@ -1,0 +1,43 @@
+# Security: Never commit classified content
+# This .gitignore exists as a safety net in case the KB is ever git-initialized.
+
+# CONFIDENTIAL — never leaves this machine
+memory/people.md
+
+# PRIVATE — block by default, whitelist specific PUBLIC files if needed
+memory/context.md
+memory/projects.md
+
+# Session extracts often contain sensitive implementation details
+wiki/sessions/
+
+# Inbox is a processing queue — always private
+Inbox/
+
+# Daily notes contain personal reflections
+Daily/
+
+# Archive may contain old private content
+Archive/
+
+# Brain CLI data
+brain-cli/node_modules/
+brain-cli/.brain-state.json
+
+# Logs contain file paths and potentially sensitive output
+scripts/*.log
+scripts/.last-*
+
+# Obsidian internals
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/
+.obsidian/hotkeys.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak

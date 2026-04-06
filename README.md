@@ -1,28 +1,55 @@
-# LLM Knowledge Base
+# Claudeopedia
 
-A personal knowledge management system built on the [Karpathy pattern](https://x.com/karpathy/status/2039805659525644595): raw sources → LLM-compiled wiki → Q&A + linting loop. Designed for Claude Code but adaptable to any LLM CLI.
+Your LLM-powered second brain. Drop anything in — the LLM compiles, cross-links, and maintains a living knowledge wiki. Every question compounds it. Every coding session feeds it. It proactively challenges your assumptions and surfaces what you don't know.
 
-**Zero manual editing.** You drop sources in, the LLM compiles, cross-links, and maintains everything. Every question you ask compounds the knowledge base.
+Built on the [Karpathy pattern](https://x.com/karpathy/status/2039805659525644595), extended with ideas from [Allie Miller](https://x.com/alliekmiller/status/2040884878229565816), [Nick Spisak](https://x.com/NickSpisak_/status/2041012360668750229), [CyrilXBT](https://x.com/cyrilXBT/status/2040988306154901742), and [Michael Chomsky](https://x.com/michael_chomsky/status/2040946855148929499).
 
 ## What It Does
 
 ```
-You → capture.sh → raw/           Sources ingested (URLs, files, thoughts)
-                  → wiki/          LLM compiles into concept articles, summaries
-                  → memory/        Working memory (decisions, gotchas, context)
-                  → wiki/queries/  Q&A results filed back (compounds over time)
-                  → wiki/sessions/ Auto-extracted learnings from coding sessions
+You → Inbox/         Drop anything: URLs, files, YouTube links, brain dumps
+        ↓
+      brain CLI       Auto-detects type, processes, routes to raw/
+        ↓
+      compile.sh      LLM compiles raw → wiki (concepts, summaries, wikilinks)
+        ↓
+      wiki/           Living knowledge base with typed relationships
+        ↓
+      insights        Proactive: challenge assumptions, find gaps, suggest connections
+        ↓
+      Obsidian        Browse everything with Dataview dashboards + classification badges
 ```
 
 ## Features
 
-- **Single entry point** — `capture.sh` routes everything: URLs, thoughts, decisions, gotchas, queries
+**Capture**
+- **Frictionless Inbox** — drop anything into `Inbox/`, brain CLI auto-processes (URLs, YouTube, text, PDFs, images, brain dumps)
+- **YouTube ingestion** — yt-dlp extracts transcripts automatically
+- **Brain dump mode** — `brain braindump` accepts any unstructured text, auto-classifies and files it
+- **Single entry point** — `capture.sh` routes everything with one command
+
+**Knowledge**
+- **Living wiki** — LLM compiles raw sources into concept articles with `[[wikilinks]]` and backlinks
+- **Typed relationships** — articles linked with `supports`, `contradicts`, `supersedes` for knowledge graph clarity
 - **Incremental compilation** — only processes new/uncompiled sources (saves tokens)
-- **Auto-session extraction** — Claude Code hook captures learnings from every conversation
-- **Security classification** — every file labeled PUBLIC/PRIVATE/CONFIDENTIAL with audit tooling
-- **Weekly automation** — memory consolidation (Mon), compile+lint (Wed) via macOS LaunchAgents
-- **Obsidian-native** — open as a vault, visual classification badges via CSS snippet
-- **Credential scanning** — detects API keys, JWTs, and tokens in your knowledge base
+- **Full-text search** — `brain search` via ripgrep across the entire KB
+
+**Intelligence**
+- **Proactive insights** — `brain insights` challenges assumptions, identifies knowledge gaps, finds hidden connections
+- **Daily briefing** — `brain daily` generates a morning note with what's active, open questions, and connections to explore
+- **Session extraction** — Claude Code hook auto-captures learnings from every coding conversation
+- **Dataview dashboards** — Knowledge Evolution, Thinking Changes, Brain Dump Tracker
+
+**Security**
+- **Classification system** — every file labeled PUBLIC/PRIVATE/CONFIDENTIAL
+- **Credential scanning** — detects API keys, JWTs, tokens, passwords
+- **`.gitignore` enforcement** — private/confidential files never committed
+- **Obsidian CSS badges** — green/orange/red visual indicators
+
+**Automation**
+- **File watcher** — `brain watch` monitors Inbox/ and auto-processes new files
+- **Weekly crons** — consolidation (Mon), compile+lint (Wed) via LaunchAgents/cron
+- **GitHub Actions CI** — classification audit on every PR
 
 ## Quick Start
 
@@ -37,22 +64,30 @@ chmod +x setup.sh
 ## Usage
 
 ```bash
-# Ingest sources
-capture.sh url https://example.com/article ai,research
-capture.sh file ~/Downloads/paper.pdf ml
+# Capture anything
+capture.sh url https://example.com ai,research       # Web article
+capture.sh youtube https://youtube.com/watch?v=abc    # YouTube transcript
+capture.sh file ~/Downloads/paper.pdf ml              # Local file
+capture.sh thought "Rate limiting needs quotas" pap   # Quick thought
+capture.sh decision "Haiku for free, Sonnet for pro"  # Decision
+capture.sh gotcha "PostgREST drops schemas" pap       # Gotcha
+capture.sh braindump                                  # Interactive brain dump
 
-# Capture thoughts and decisions
-capture.sh thought "Rate limiting needs per-user quotas" backend
-capture.sh decision "Using Haiku for free tier, Sonnet for pro" pap
-capture.sh gotcha "PostgREST drops schemas on dashboard edit" pap
+# Or just drop files into ~/knowledge-base/Inbox/ — brain CLI handles the rest
 
-# Ask questions (results filed back into wiki)
-capture.sh query "What are the tradeoffs of SSR vs ISR for this use case?"
+# Brain CLI
+brain watch              # Watch Inbox/ and auto-process
+brain process            # Process all pending Inbox/ files
+brain braindump          # Interactive brain dump
+brain search "query"     # Full-text search
+brain status             # KB stats and health
+brain daily              # Generate today's daily note
+brain insights           # Proactive insight generation
 
 # Pipeline
-capture.sh compile              # Compile raw → wiki
-capture.sh lint                 # Health checks + security audit
-capture.sh audit                # Classification + credential scan
+capture.sh compile       # Compile raw → wiki
+capture.sh lint          # Health checks
+capture.sh audit         # Security scan
 ```
 
 ## Classification System
@@ -71,20 +106,29 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 
 ```
 ~/knowledge-base/
-├── memory/                    # Claude's working memory
+├── Inbox/                     # Drop anything here — auto-processed
+├── Daily/                     # Daily notes (Templater template)
+├── Dashboards/                # Dataview dashboards
+│   ├── Knowledge-Evolution    # Track KB growth over time
+│   ├── Thinking-Changes       # How your thinking evolved
+│   └── Brain-Dump-Tracker     # Capture history and processing stats
+├── memory/                    # Working memory
 │   ├── context.md             # Current focus + roadmap          [PRIVATE]
-│   ├── preferences.md         # Workflow prefs                    [PUBLIC]
-│   ├── projects.md            # Project facts not in code        [PRIVATE]
+│   ├── preferences.md         # Workflow prefs                   [PUBLIC]
+│   ├── projects.md            # Project facts                    [PRIVATE]
 │   └── people.md              # Stakeholders                     [CONFIDENTIAL]
-├── raw/                       # Source documents
+├── raw/                       # Processed source material
 ├── wiki/
 │   ├── index.md               # Auto-maintained master index
-│   ├── concepts/              # LLM-compiled concept articles
-│   ├── summaries/             # Per-source summaries + backlinks
-│   ├── queries/               # Filed Q&A results
+│   ├── concepts/              # Compiled articles with [[wikilinks]]
+│   ├── summaries/             # Per-source summaries
+│   ├── queries/               # Filed Q&A + proactive insights
 │   └── sessions/              # Auto-extracted session learnings  [PRIVATE]
-├── scripts/                   # All automation
-└── .obsidian/                 # Vault config + classification CSS
+├── Archive/                   # Processed inbox items, retired content
+├── brain-cli/                 # Node.js brain CLI
+├── scripts/                   # Shell automation
+├── templates/                 # Obsidian Templater templates
+└── CLAUDE.md                  # Vault rules for LLM agents
 ```
 
 ## Automation
