@@ -1,0 +1,43 @@
+name: Classification Audit
+
+on:
+  pull_request:
+    paths:
+      - 'templates/**'
+      - 'scripts/**'
+  push:
+    branches: [main]
+    paths:
+      - 'templates/**'
+      - 'scripts/**'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check template files have classification frontmatter
+        run: |
+          MISSING=0
+          for f in templates/memory/*.md; do
+            if ! head -5 "$f" | grep -q 'classification:'; then
+              echo "MISSING classification: $f"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ $MISSING -gt 0 ]; then
+            echo "::error::$MISSING template file(s) missing classification frontmatter"
+            exit 1
+          fi
+          echo "All template files have classification labels."
+
+      - name: Scan for credential patterns
+        run: |
+          FOUND=0
+          PATTERNS="sk-[a-zA-Z0-9]{20,}|sk_live_|sk_test_|sbp_[a-zA-Z0-9]|eyJ[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]|gho_[a-zA-Z0-9]"
+          if grep -rE "$PATTERNS" --include="*.md" . 2>/dev/null | grep -v '.github/' | grep -v 'classify-check.sh'; then
+            echo "::error::Credential patterns found in repository files"
+            exit 1
+          fi
+          echo "No credential patterns detected."
