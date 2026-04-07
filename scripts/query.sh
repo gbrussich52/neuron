@@ -22,7 +22,9 @@ OUTFILE="$WIKI_DIR/queries/${TIMESTAMP}_${SLUG}.md"
 echo "Researching: $QUERY"
 echo ""
 
-claude --print "
+LLM_RUN="$KB_DIR/brain-cli/llm-run.js"
+
+node "$LLM_RUN" synthesize --stdin --tools "Read,Write,Glob,Grep" <<PROMPT 2>&1
 You are a research agent with access to a personal knowledge base.
 
 ## Question
@@ -47,7 +49,7 @@ Use this format:
 \`\`\`markdown
 ---
 title: [Descriptive title for this query]
-query: \"$QUERY\"
+query: "$QUERY"
 date: $(date '+%Y-%m-%d')
 sources_used: [list of wiki articles referenced]
 tags: [relevant tags]
@@ -64,7 +66,7 @@ tags: [relevant tags]
 Also print the answer to stdout so the user sees it immediately.
 
 Be thorough. Cite specific facts from the wiki. If the wiki doesn't have enough to answer fully, say what's missing and suggest sources to ingest.
-" --allowedTools "Read,Write,Glob,Grep" 2>&1
+PROMPT
 
 echo ""
 echo "Answer filed to: $OUTFILE"

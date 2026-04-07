@@ -1,0 +1,79 @@
+{
+  "provider": "claude-cli",
+
+  "providers": {
+    "claude-cli": {
+      "description": "Shell out to claude --print (default, zero config needed)"
+    },
+    "anthropic-api": {
+      "base_url": "https://api.anthropic.com",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "api_version": "2023-06-01"
+    },
+    "openai-compatible": {
+      "base_url": "http://localhost:11434/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "description": "Works with Ollama, Grok API, LM Studio, any OpenAI-compatible endpoint"
+    }
+  },
+
+  "tiers": {
+    "classify": {
+      "description": "Cheapest model — classification, tagging, simple extraction",
+      "models": {
+        "claude-cli": "haiku",
+        "anthropic-api": "claude-haiku-4-5-20251001",
+        "openai-compatible": "gemma4:e2b"
+      }
+    },
+    "compile": {
+      "description": "Mid-tier — wiki compilation, summaries, connection finding",
+      "models": {
+        "claude-cli": "sonnet",
+        "anthropic-api": "claude-sonnet-4-6",
+        "openai-compatible": "gemma4:e4b"
+      }
+    },
+    "synthesize": {
+      "description": "Best model — deep analysis, research synthesis, insights",
+      "models": {
+        "claude-cli": "opus",
+        "anthropic-api": "claude-opus-4-6",
+        "openai-compatible": "gemma4:e4b"
+      }
+    },
+    "embed": {
+      "description": "Embedding model — vector search indexing",
+      "models": {
+        "claude-cli": null,
+        "anthropic-api": null,
+        "openai-compatible": "nomic-embed-text"
+      },
+      "embed_provider": "openai-compatible",
+      "embed_base_url": "http://localhost:11434/v1",
+      "embed_dimensions": 768
+    }
+  },
+
+  "features": {
+    "semantic_search": false,
+    "connection_finder": false,
+    "auto_research": false,
+    "metrics": false,
+    "auto_improve": false,
+    "auto_commit": false
+  },
+
+  "research": {
+    "tavily_api_key_env": "TAVILY_API_KEY",
+    "max_steps": 5,
+    "auto_compile": true,
+    "auto_connect": true
+  },
+
+  "improve": {
+    "max_iterations": 5,
+    "target_grade": "B",
+    "research_gaps_per_iteration": 2
+  }
+}

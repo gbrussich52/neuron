@@ -6,13 +6,9 @@ set -euo pipefail
 
 KB_DIR="$HOME/knowledge-base"
 MEMORY_DIR="$KB_DIR/memory"
+PAP_MEMORY="$HOME/project-claude/property-appraisal-pro/.claude/memory"
+PROJECT_MEMORY="$HOME/.claude/projects/-Users-gianibrussich-project-claude/memory"
 LOG_FILE="$KB_DIR/scripts/consolidate.log"
-
-# Discover Claude Code project memory directory dynamically
-PROJECT_MEMORY=$(find "$HOME/.claude/projects" -maxdepth 2 -name "MEMORY.md" -type f 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo "")
-
-# Discover project-level memory directories (any .claude/memory/ under common project roots)
-PROJECT_MEMORIES=$(find "$HOME" -maxdepth 5 -path "*/.claude/memory/gotchas.md" -type f 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || echo "")
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting consolidation" >> "$LOG_FILE"
 
@@ -21,7 +17,9 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') — Running classification audit" >> "$LOG_FI
 "$KB_DIR/scripts/classify-check.sh" >> "$LOG_FILE" 2>&1 || true
 
 # Step 2: Consolidate memory + session extracts
-claude --print "
+LLM_RUN="$KB_DIR/brain-cli/llm-run.js"
+
+node "$LLM_RUN" compile --stdin --tools "Read,Write,Glob,Grep,Edit,Bash" <<PROMPT 2>&1 | tail -30 >> "$LOG_FILE"
 You are a memory and knowledge consolidation agent. Your job is aggressive pruning, deduplication, and integration.
 
 ## Your workspace
@@ -68,7 +66,7 @@ Be aggressive about pruning. Conservative about deleting session extracts.
 Memory that doesn't actively help future conversations is dead weight.
 
 Write all updated files back. Log what you changed to stdout.
-" --allowedTools "Read,Write,Glob,Grep,Edit,Bash" 2>&1 | tail -30 >> "$LOG_FILE"
+PROMPT
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Consolidation complete" >> "$LOG_FILE"
 echo "---" >> "$LOG_FILE"

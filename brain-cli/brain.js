@@ -6,13 +6,19 @@
  * and surfaces proactive insights.
  *
  * Commands:
- *   neuron watch          — Watch Inbox/ for new files, auto-process
- *   neuron process        — Process all pending Inbox/ files now
- *   neuron braindump      — Interactive brain dump (stdin → Inbox/)
- *   neuron search <query> — Full-text search across the entire KB
- *   neuron status         — Show KB stats and health
- *   neuron daily          — Generate today's daily note
- *   neuron insights       — Run proactive insight generation
+ *   neuron watch              — Watch Inbox/ for new files, auto-process
+ *   neuron process            — Process all pending Inbox/ files now
+ *   neuron braindump          — Interactive brain dump (stdin → Inbox/)
+ *   neuron search <query>     — Full-text search across the entire KB
+ *   neuron semantic-search <q> — Semantic/vector search (requires reindex)
+ *   neuron reindex            — Build/update semantic search index
+ *   neuron status             — Show KB stats and health
+ *   neuron daily              — Generate today's daily note
+ *   neuron insights           — Run proactive insight generation
+ *   neuron connections <file> — Find related articles and suggest wikilinks
+ *   neuron metrics            — Show thinking quality score
+ *   neuron research <topic>   — Autonomous web research → wiki
+ *   neuron improve            — Self-improvement loop (compile→lint→research→repeat)
  *
  * Security note: execSync is used intentionally for local CLI delegation.
  * All inputs are local file paths or user-provided search queries — no
@@ -20,10 +26,15 @@
  */
 
 import { watch, readFileSync, writeFileSync, existsSync, readdirSync, statSync, renameSync, mkdirSync } from 'fs';
-import { join, basename, extname, resolve } from 'path';
+import { join, basename, extname, resolve, dirname } from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { createInterface } from 'readline';
 import { homedir } from 'os';
+import { fileURLToPath } from 'url';
+
+// Provider abstraction — routes LLM calls through configured backend
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const { llmCall, llmCallSync, loadConfig } = await import(join(__dirname, 'providers.js'));
 
 // ── Configuration ──────────────────────────────────────────────
 const KB_DIR = process.env.KB_DIR || join(homedir(), 'knowledge-base');
@@ -349,7 +360,7 @@ function cmdStatus() {
   console.log('');
 }
 
-function cmdDaily() {
+async function cmdDaily() {
   const today = dateStr();
   const dailyFile = join(DAILY, `${today}.md`);
 
@@ -360,14 +371,16 @@ function cmdDaily() {
 
   log(`Generating daily note for ${today}...`);
   try {
-    execFileSync('claude', ['--print',
-      `You are a daily briefing agent. Read ${MEMORY}/context.md and ${WIKI}/index.md. ` +
-      `Write a daily note to ${dailyFile} with frontmatter (classification: PRIVATE, date: ${today}, type: daily-note) ` +
-      `and sections: Morning Briefing (what's active today), Open Questions (worth exploring), ` +
-      `Connections to Explore (non-obvious links), Capture Zone (empty for throughout the day). ` +
-      `Be concise. Focus on actionable items.`,
-      '--allowedTools', 'Read,Write,Glob'
-    ], { timeout: 60000, stdio: 'pipe' });
+    await llmCall({
+      prompt: `You are a daily briefing agent. Read ${MEMORY}/context.md and ${WIKI}/index.md. ` +
+        `Write a daily note to ${dailyFile} with frontmatter (classification: PRIVATE, date: ${today}, type: daily-note) ` +
+        `and sections: Morning Briefing (what's active today), Open Questions (worth exploring), ` +
+        `Connections to Explore (non-obvious links), Capture Zone (empty for throughout the day). ` +
+        `Be concise. Focus on actionable items.`,
+      tier: 'compile',
+      tools: ['Read', 'Write', 'Glob'],
+      timeout: 60000,
+    });
 
     if (existsSync(dailyFile)) {
       log(`Daily note created: ${today}.md`);
@@ -403,19 +416,21 @@ type: daily-note
   log(`Template daily note created: ${date}.md`);
 }
 
-function cmdInsights() {
+async function cmdInsights() {
   log('Generating proactive insights...\n');
   try {
-    const result = execFileSync('claude', ['--print',
-      `You are a proactive insight agent for a knowledge base at ${KB_DIR}. ` +
-      `Read the wiki index, recent session extracts, and memory files. Generate: ` +
-      `1) Challenge Your Assumptions — pick 2-3 beliefs from the KB, present counter-arguments, rate confidence 1-10. ` +
-      `2) Knowledge Gaps — 3 underexplored topics with why they matter and suggested sources. ` +
-      `3) Hidden Connections — 2-3 non-obvious links between concepts in different areas. ` +
-      `4) Learning Path — 3 things to learn this week based on current projects. ` +
-      `Be specific. Reference actual articles and facts, not generic advice. Print to stdout.`,
-      '--allowedTools', 'Read,Glob,Grep'
-    ], { encoding: 'utf-8', timeout: 120000 });
+    const result = await llmCall({
+      prompt: `You are a proactive insight agent for a knowledge base at ${KB_DIR}. ` +
+        `Read the wiki index, recent session extracts, and memory files. Generate: ` +
+        `1) Challenge Your Assumptions — pick 2-3 beliefs from the KB, present counter-arguments, rate confidence 1-10. ` +
+        `2) Knowledge Gaps — 3 underexplored topics with why they matter and suggested sources. ` +
+        `3) Hidden Connections — 2-3 non-obvious links between concepts in different areas. ` +
+        `4) Learning Path — 3 things to learn this week based on current projects. ` +
+        `Be specific. Reference actual articles and facts, not generic advice. Print to stdout.`,
+      tier: 'synthesize',
+      tools: ['Read', 'Glob', 'Grep'],
+      timeout: 120000,
+    });
     console.log(result);
 
     // File the insights
@@ -436,31 +451,111 @@ ${result}`);
   }
 }
 
+// ── Dynamic Command Loaders ───────────────────────────────────
+// These load modules on demand to avoid startup cost for unused features.
+
+async function cmdSemanticSearch(query) {
+  try {
+    const { search } = await import(join(__dirname, 'semantic.js'));
+    await search(query);
+  } catch (e) {
+    if (e.code === 'ERR_MODULE_NOT_FOUND') {
+      warn('Semantic search not yet available. Run `neuron reindex` first.');
+    } else { throw e; }
+  }
+}
+
+async function cmdReindex() {
+  const { buildIndex } = await import(join(__dirname, 'semantic.js'));
+  await buildIndex();
+}
+
+async function cmdConnections(filePath) {
+  const { findConnections } = await import(join(__dirname, 'connections.js'));
+  await findConnections(filePath);
+}
+
+async function cmdMetrics(showHistory) {
+  const { displayMetrics } = await import(join(__dirname, 'metrics.js'));
+  await displayMetrics(showHistory);
+}
+
+async function cmdResearch(topic) {
+  const { runResearch } = await import(join(__dirname, 'research.js'));
+  await runResearch(topic);
+}
+
+async function cmdDeepResearch(args) {
+  const { runDeepResearch } = await import(join(__dirname, 'research.js'));
+  // Parse args: topic is everything that's not a flag
+  const flags = {};
+  const topicParts = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--max-iterations') { flags.maxIterations = parseInt(args[++i], 10); }
+    else if (args[i] === '--ralph') { flags.standalone = false; }
+    else { topicParts.push(args[i]); }
+  }
+  await runDeepResearch(topicParts.join(' '), flags);
+}
+
+async function cmdImprove(args) {
+  const { runImprove } = await import(join(__dirname, 'improve.js'));
+  await runImprove(args);
+}
+
 // ── CLI Router ─────────────────────────────────────────────────
 const [,, command, ...args] = process.argv;
 
-switch (command) {
-  case 'watch': cmdWatch(); break;
-  case 'process': cmdProcess(); break;
-  case 'braindump': case 'dump': cmdBraindump(); break;
-  case 'search': cmdSearch(args.join(' ')); break;
-  case 'status': cmdStatus(); break;
-  case 'daily': cmdDaily(); break;
-  case 'insights': cmdInsights(); break;
-  default:
-    console.log(`
+// Wrap in async IIFE to support await in command handlers
+(async () => {
+  try {
+    switch (command) {
+      case 'watch': cmdWatch(); break;
+      case 'process': cmdProcess(); break;
+      case 'braindump': case 'dump': cmdBraindump(); break;
+      case 'search': cmdSearch(args.join(' ')); break;
+      case 'semantic-search': await cmdSemanticSearch(args.join(' ')); break;
+      case 'reindex': await cmdReindex(); break;
+      case 'connections': await cmdConnections(args[0]); break;
+      case 'metrics': await cmdMetrics(args.includes('--history')); break;
+      case 'research': await cmdResearch(args.join(' ')); break;
+      case 'deep-research': await cmdDeepResearch(args); break;
+      case 'improve': await cmdImprove(args); break;
+      case 'status': cmdStatus(); break;
+      case 'daily': await cmdDaily(); break;
+      case 'insights': await cmdInsights(); break;
+      default:
+        console.log(`
   neuron — LLM-powered second brain
 
-  Commands:
-    watch          Watch Inbox/ and auto-process new files
-    process        Process all pending Inbox/ files now
-    braindump      Interactive brain dump (type/paste, Ctrl+D to save)
-    search <query> Full-text search across the entire KB
-    status         Show KB stats and health
-    daily          Generate today's daily note
-    insights       Run proactive insight generation
+  Core:
+    watch               Watch Inbox/ and auto-process new files
+    process             Process all pending Inbox/ files now
+    braindump           Interactive brain dump (type/paste, Ctrl+D to save)
+    status              Show KB stats and health
+    daily               Generate today's daily note
+
+  Search:
+    search <query>      Full-text search (ripgrep) across KB
+    semantic-search <q> Semantic/vector search (requires reindex)
+    reindex             Build or update the semantic search index
+
+  Intelligence:
+    insights            Run proactive insight generation
+    connections <file>  Find related articles and suggest wikilinks
+    metrics [--history] Show thinking quality score and trends
+    research <topic>    Autonomous web research → wiki (single pass)
+    deep-research <t>   Karpathy auto-research loop (iterative deep dive)
+                        --max-iterations N  --ralph (use Ralph Loop)
+    improve [opts]      Self-improvement loop (compile→lint→research→repeat)
+                        --max-iterations N  --standalone  --target-grade A-F
 
   Drop anything into ~/knowledge-base/Inbox/ — it gets auto-processed.
   URLs, YouTube links, text files, PDFs, images — all handled.
-    `);
-}
+        `);
+    }
+  } catch (err) {
+    console.error(`[neuron] Fatal: ${err.message}`);
+    process.exit(1);
+  }
+})();

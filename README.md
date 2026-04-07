@@ -1,23 +1,31 @@
 # Neuron
 
-Your LLM-powered second brain. Drop anything in — the LLM compiles, cross-links, and maintains a living knowledge wiki. Every question compounds it. Every coding session feeds it. It proactively challenges your assumptions and surfaces what you don't know.
+Your LLM-powered second brain. Drop anything in — the LLM compiles, cross-links, and maintains a living knowledge wiki. Every question compounds it. Every coding session feeds it. It proactively challenges your assumptions and surfaces what you don't know. It can autonomously research topics, self-improve, and run fully local with no API costs.
 
-Built on the [Karpathy pattern](https://x.com/karpathy/status/2039805659525644595), extended with ideas from [Allie Miller](https://x.com/alliekmiller/status/2040884878229565816), [Nick Spisak](https://x.com/NickSpisak_/status/2041012360668750229), [CyrilXBT](https://x.com/cyrilXBT/status/2040988306154901742), and [Michael Chomsky](https://x.com/michael_chomsky/status/2040946855148929499).
+Built on the [Karpathy pattern](https://x.com/karpathy/status/2039805659525644595), extended with ideas from [Allie Miller](https://x.com/alliekmiller/status/2040884878229565816), [Nick Spisak](https://x.com/NickSpisak_/status/2041012360668750229), [CyrilXBT](https://x.com/cyrilXBT/status/2040988306154901742), and [Michael Chomsky](https://x.com/michael_chomsky/status/2040946855148929499). Autonomous research loop inspired by [Geoffrey Huntley's Ralph technique](https://ghuntley.com/ralph/).
 
 ## What It Does
 
 ```
-You → Inbox/         Drop anything: URLs, files, YouTube links, brain dumps
+You → Inbox/              Drop anything: URLs, files, YouTube links, brain dumps
         ↓
-      Neuron CLI       Auto-detects type, processes, routes to raw/
+      Neuron CLI           Auto-detects type, processes, routes to raw/
         ↓
-      compile.sh      LLM compiles raw → wiki (concepts, summaries, wikilinks)
+      compile.sh           LLM compiles raw → wiki (concepts, summaries, wikilinks)
         ↓
-      wiki/           Living knowledge base with typed relationships
+      wiki/                Living knowledge base with typed relationships
         ↓
-      insights        Proactive: challenge assumptions, find gaps, suggest connections
+      connections.js       Semantic search finds related articles, suggests wikilinks
         ↓
-      Obsidian        Browse everything with Dataview dashboards + classification badges
+      insights / research  Proactive insights, autonomous web research, gap detection
+        ↓
+      deep-research        Karpathy auto-research loop: research → compile → find gaps → repeat
+        ↓
+      improve              Self-improvement loop: compile → lint → research → recompile
+        ↓
+      metrics              Brain Score (A-F) tracks if the system is making you smarter
+        ↓
+      Obsidian             Browse everything with Dataview dashboards + classification badges
 ```
 
 ## Features
@@ -33,12 +41,24 @@ You → Inbox/         Drop anything: URLs, files, YouTube links, brain dumps
 - **Typed relationships** — articles linked with `supports`, `contradicts`, `supersedes` for knowledge graph clarity
 - **Incremental compilation** — only processes new/uncompiled sources (saves tokens)
 - **Full-text search** — `neuron search` via ripgrep across the entire KB
+- **Semantic search** — `neuron semantic-search` finds conceptual matches via embeddings (Ollama + nomic-embed-text)
+- **Connection finder** — `neuron connections` uses semantic search + LLM to suggest wikilinks and gap questions
 
 **Intelligence**
 - **Proactive insights** — `neuron insights` challenges assumptions, identifies knowledge gaps, finds hidden connections
 - **Daily briefing** — `neuron daily` generates a morning note with what's active, open questions, and connections to explore
 - **Session extraction** — Claude Code hook auto-captures learnings from every coding conversation
-- **Dataview dashboards** — Knowledge Evolution, Thinking Changes, Brain Dump Tracker
+- **Autonomous research** — `neuron research "topic"` decomposes a topic, searches the web via Tavily, ingests results, compiles into wiki
+- **Karpathy deep research** — `neuron deep-research "topic"` iteratively researches, compiles, finds gaps, researches gaps, recompiles until thorough
+- **Self-improvement loop** — `neuron improve` runs compile→lint→research gaps→recompile until Brain Score reaches target grade
+- **Brain Score** — `neuron metrics` computes a composite A-F grade: content volume, link density, weekly activity, compilation lag, lint health
+- **Dataview dashboards** — Knowledge Evolution, Thinking Changes, Brain Dump Tracker, Brain Score
+
+**Model Agnostic**
+- **Provider abstraction** — `providers.js` routes LLM calls through Claude CLI, Anthropic API, or any OpenAI-compatible endpoint (Ollama, Grok, LM Studio)
+- **Tier-based routing** — classify (cheapest), compile (mid), synthesize (best), embed (embedding model) — each tier maps to a different model
+- **Run fully local** — switch to Ollama + Gemma 4 in `neuron.config.json` for zero API cost operation
+- **Zero-change default** — defaults to `claude-cli`, existing behavior preserved byte-for-byte
 
 **Security**
 - **Classification system** — every file labeled PUBLIC/PRIVATE/CONFIDENTIAL
@@ -50,6 +70,9 @@ You → Inbox/         Drop anything: URLs, files, YouTube links, brain dumps
 - **File watcher** — `neuron watch` monitors Inbox/ and auto-processes new files
 - **Weekly crons** — consolidation (Mon), compile+lint (Wed) via LaunchAgents/cron
 - **GitHub Actions CI** — classification audit on every PR
+- **Smart git auto-commit** — `auto-commit.sh` generates LLM-powered commit messages
+- **Cross-device sync** — `sync.sh` with git-crypt encryption for PRIVATE/CONFIDENTIAL files
+- **Ralph Loop integration** — `neuron improve` and `neuron deep-research --ralph` integrate with the [Ralph Loop](https://ghuntley.com/ralph/) for iterative Claude Code sessions
 
 ## Quick Start
 
@@ -75,19 +98,58 @@ capture.sh braindump                                  # Interactive brain dump
 
 # Or just drop files into ~/knowledge-base/Inbox/ — Neuron CLI handles the rest
 
-# Brain CLI
+# Core
 neuron watch              # Watch Inbox/ and auto-process
 neuron process            # Process all pending Inbox/ files
 neuron braindump          # Interactive brain dump
-neuron search "query"     # Full-text search
 neuron status             # KB stats and health
 neuron daily              # Generate today's daily note
-neuron insights           # Proactive insight generation
+
+# Search
+neuron search "query"             # Full-text search (ripgrep)
+neuron semantic-search "query"    # Semantic/vector search (requires reindex)
+neuron reindex                    # Build or update semantic search index
+
+# Intelligence
+neuron insights                   # Proactive insight generation
+neuron connections <file>         # Find related articles, suggest wikilinks
+neuron metrics                    # Show Brain Score (A-F grade)
+neuron metrics --history          # Show score trends over time
+neuron research "topic"           # Autonomous web research (single pass)
+neuron deep-research "topic"      # Karpathy auto-research loop (iterative)
+neuron improve --standalone       # Self-improvement loop (compile→lint→research→repeat)
 
 # Pipeline
 capture.sh compile       # Compile raw → wiki
 capture.sh lint          # Health checks
 capture.sh audit         # Security scan
+
+# Sync
+scripts/sync.sh init     # Initialize git + git-crypt
+scripts/sync.sh push     # Commit and push to remote
+scripts/sync.sh pull     # Pull latest from remote
+```
+
+### Research Hierarchy
+
+| Command | Scope | Iterations | Exit Condition |
+|---------|-------|------------|----------------|
+| `neuron research "topic"` | Single topic, single pass | 1 | Done after one cycle |
+| `neuron deep-research "topic"` | Single topic, iterative | 1-5 | No gaps remain in topic |
+| `neuron improve` | Entire KB | 1-5 | Brain Score >= target grade |
+
+### Switch to Local Models (Zero API Cost)
+
+```bash
+# Install Ollama + models
+brew install ollama && brew services start ollama
+ollama pull gemma4:e2b              # Classify tier (fast, tiny)
+ollama pull gemma4:e4b              # Compile + synthesize tier
+ollama pull nomic-embed-text        # Embedding model for semantic search
+
+# Switch neuron to local — edit neuron.config.json:
+#   "provider": "openai-compatible"
+# That's it. All LLM calls now route through Ollama.
 ```
 
 ## Classification System
@@ -111,7 +173,11 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 ├── Dashboards/                # Dataview dashboards
 │   ├── Knowledge-Evolution    # Track KB growth over time
 │   ├── Thinking-Changes       # How your thinking evolved
-│   └── Brain-Dump-Tracker     # Capture history and processing stats
+│   ├── Brain-Dump-Tracker     # Capture history and processing stats
+│   └── Brain-Score            # Thinking quality score + trends
+├── Brain-Index/               # Semantic search index (auto-generated)
+│   ├── embeddings.json        # File-backed vector embeddings
+│   └── metrics.json           # Weekly Brain Score snapshots
 ├── memory/                    # Working memory
 │   ├── context.md             # Current focus + roadmap          [PRIVATE]
 │   ├── preferences.md         # Workflow prefs                   [PUBLIC]
@@ -122,11 +188,30 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 │   ├── index.md               # Auto-maintained master index
 │   ├── concepts/              # Compiled articles with [[wikilinks]]
 │   ├── summaries/             # Per-source summaries
-│   ├── queries/               # Filed Q&A + proactive insights
+│   ├── queries/               # Filed Q&A, research reports, gap questions
 │   └── sessions/              # Auto-extracted session learnings  [PRIVATE]
 ├── Archive/                   # Processed inbox items, retired content
 ├── brain-cli/                 # Node.js Neuron CLI
+│   ├── brain.js               # Main CLI (14 commands)
+│   ├── providers.js           # LLM provider abstraction (Claude/Anthropic/Ollama)
+│   ├── llm-run.js             # Shell bridge for bash scripts → providers
+│   ├── neuron.config.json     # Provider routing, feature flags, research config
+│   ├── semantic.js            # File-backed vector search + incremental indexing
+│   ├── connections.js         # Cross-linker + gap detector
+│   ├── metrics.js             # Brain Score (A-F grade) + weekly snapshots
+│   ├── research.js            # Autonomous web research + Karpathy deep research
+│   └── improve.js             # Self-improvement loop (Ralph Loop + standalone)
 ├── scripts/                   # Shell automation
+│   ├── capture.sh             # Universal entry point (18 subcommands)
+│   ├── compile.sh             # raw → wiki compilation
+│   ├── lint.sh                # Wiki health checks
+│   ├── query.sh               # Q&A against wiki
+│   ├── ingest.sh              # URL/file ingestion (firecrawl preferred)
+│   ├── session-extract.sh     # Claude Code session → learnings
+│   ├── consolidate.sh         # Memory pruning + session promotion
+│   ├── classify-check.sh      # Classification + credential audit
+│   ├── auto-commit.sh         # Smart git commits with LLM messages
+│   └── sync.sh                # Cross-device git + git-crypt sync
 ├── templates/                 # Obsidian Templater templates
 └── CLAUDE.md                  # Vault rules for LLM agents
 ```
@@ -155,19 +240,32 @@ claude settings set hooks.Stop '[{"command": "~/knowledge-base/scripts/session-h
 
 ## Requirements
 
-- **Claude Code CLI** (`claude`) — the LLM engine for compilation, linting, Q&A
+**Required (one of):**
+- **Claude Code CLI** (`claude`) — default LLM engine, zero config
+- **Ollama** (`ollama`) — for local-only operation with Gemma 4, Llama, etc.
+- **Anthropic API key** — for direct API access without Claude CLI
+
+**Platform:**
 - **macOS** — LaunchAgents for automation
 - **Linux** — cron for automation (auto-detected by installer)
-- **Obsidian** (optional) — for browsing the wiki with visual classification badges
-- **firecrawl-cli** (optional) — better web-to-markdown conversion for URL ingestion
+
+**Optional:**
+- **Obsidian** — for browsing the wiki with visual classification badges and Dataview dashboards
+- **firecrawl-cli** — better web-to-markdown conversion for URL ingestion
+- **Tavily API key** — enables `neuron research` and `neuron deep-research` web research
+- **git-crypt** — encrypts PRIVATE/CONFIDENTIAL files for safe remote sync
+- **Ralph Loop plugin** — enables iterative Claude Code sessions for `neuron improve` and `neuron deep-research --ralph`
 
 ## Design Principles
 
 1. **The LLM maintains the wiki, not you** — you drop sources, it compiles
 2. **Every query compounds** — Q&A results file back into the wiki
-3. **No RAG needed at this scale** — Claude's context window + auto-maintained indexes handle it
-4. **Security by default** — classification on every file, credential scanning, .gitignore enforcement
-5. **Memory is a hint, not truth** — always verify against current state before acting on memory
+3. **Model agnostic** — swap providers in one config line; run local or cloud
+4. **Cost-optimized by design** — tier routing sends cheap tasks to cheap models, hard tasks to good models
+5. **Self-improving** — the system autonomously researches its own gaps and recompiles
+6. **No RAG needed at this scale** — LLM context window + auto-maintained indexes handle it; optional semantic search for conceptual queries
+7. **Security by default** — classification on every file, credential scanning, .gitignore enforcement
+8. **Memory is a hint, not truth** — always verify against current state before acting on memory
 
 ## Inspiration & Credits
 
@@ -222,10 +320,12 @@ See **[QUICKSTART.md](QUICKSTART.md)** for a visual reference card, command chea
 
 Issues and PRs welcome. Some ideas:
 
-- **Adapters for other LLM CLIs** — Copilot, Cursor, Aider, etc.
-- **Better web-to-markdown conversion** — pandoc, readability, etc.
-- **Obsidian plugin** — classification badges in the file explorer, compile/lint from the command palette
-- **Watch mode** — auto-compile when new files appear in `raw/`
+- **Obsidian plugin** — classification badges in file explorer, "Compile Selected" from command palette, Brain Score widget
+- **Additional search providers** — Brave Search, SearXNG, Perplexity as alternatives to Tavily
+- **Better web-to-markdown** — pandoc, readability, Jina Reader
+- **Mobile quick capture** — Shortcuts/Tasker integration for iOS/Android → Inbox/
+- **MCP server** — expose neuron as an MCP tool for other AI agents
+- **Fine-tuning pipeline** — Karpathy's vision: generate synthetic data from the wiki, fine-tune so the LLM "knows" the data in its weights
 
 ## License
 

@@ -27,7 +27,9 @@ fi
 
 echo "Linting wiki ($CONCEPTS concepts, $SUMMARIES summaries, $SESSIONS sessions)..."
 
-claude --print "
+LLM_RUN="$KB_DIR/brain-cli/llm-run.js"
+
+node "$LLM_RUN" compile --stdin --tools "Read,Write,Glob,Grep,Edit" <<PROMPT 2>&1 | tail -30 >> "$LOG_FILE"
 You are a wiki linter and quality auditor. Your job is to improve an existing knowledge base.
 
 ## Your workspace
@@ -76,7 +78,7 @@ You are a wiki linter and quality auditor. Your job is to improve an existing kn
   - Overall health score (A/B/C/D/F)
 
 Be aggressive about fixing issues. Conservative about deleting content.
-" --allowedTools "Read,Write,Glob,Grep,Edit" 2>&1 | tail -30 >> "$LOG_FILE"
+PROMPT
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Lint complete" >> "$LOG_FILE"
 echo "---" >> "$LOG_FILE"

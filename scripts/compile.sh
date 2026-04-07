@@ -24,7 +24,9 @@ fi
 
 echo "Found $UNCOMPILED uncompiled source(s). Compiling..."
 
-claude --print "
+LLM_RUN="$KB_DIR/brain-cli/llm-run.js"
+
+node "$LLM_RUN" compile --stdin --tools "Read,Write,Glob,Grep,Edit" <<PROMPT 2>&1 | tail -30 >> "$LOG_FILE"
 You are a knowledge base compiler. Your job is to incrementally compile raw sources into a structured wiki.
 
 ## Your workspace
@@ -64,7 +66,7 @@ You are a knowledge base compiler. Your job is to incrementally compile raw sour
 - If a source is low quality or redundant, note it but still compile it
 
 Be thorough. Read every uncompiled source fully before writing.
-" --allowedTools "Read,Write,Glob,Grep,Edit" 2>&1 | tail -30 >> "$LOG_FILE"
+PROMPT
 COMPILE_EXIT=$?
 
 if [[ $COMPILE_EXIT -ne 0 ]]; then
@@ -76,6 +78,12 @@ fi
 
 # Update last-run timestamp
 date '+%Y-%m-%d %H:%M:%S' > "$LAST_RUN"
+
+# Incremental reindex for semantic search (if enabled)
+if node -e "const c=JSON.parse(require('fs').readFileSync('$KB_DIR/brain-cli/neuron.config.json','utf-8'));process.exit(c.features.semantic_search?0:1)" 2>/dev/null; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — Running incremental reindex" >> "$LOG_FILE"
+  node "$KB_DIR/brain-cli/semantic.js" 2>&1 | tail -5 >> "$LOG_FILE" || true
+fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Compilation complete" >> "$LOG_FILE"
 echo "---" >> "$LOG_FILE"

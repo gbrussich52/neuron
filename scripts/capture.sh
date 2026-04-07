@@ -188,6 +188,34 @@ EOF
     exec "$SCRIPTS_DIR/lint.sh"
     ;;
 
+  semantic-search)
+    exec node "$KB_DIR/brain-cli/brain.js" semantic-search "$@"
+    ;;
+
+  reindex)
+    exec node "$KB_DIR/brain-cli/brain.js" reindex
+    ;;
+
+  connections)
+    exec node "$KB_DIR/brain-cli/brain.js" connections "$@"
+    ;;
+
+  metrics)
+    exec node "$KB_DIR/brain-cli/brain.js" metrics "$@"
+    ;;
+
+  research)
+    exec node "$KB_DIR/brain-cli/brain.js" research "$@"
+    ;;
+
+  deep-research)
+    exec node "$KB_DIR/brain-cli/brain.js" deep-research "$@"
+    ;;
+
+  improve)
+    exec node "$KB_DIR/brain-cli/brain.js" improve "$@"
+    ;;
+
   help|*)
     cat <<EOF
 Neuron — Knowledge Base Capture Tool
@@ -206,14 +234,23 @@ Capture:
 Knowledge:
   query "question"              Ask a question against the wiki
   search <query>                Full-text search across KB
+  semantic-search <query>       Semantic/vector search (requires reindex)
   daily                         Generate today's daily note
   insights                      Proactive insight generation
+
+Intelligence:
+  connections <file>            Find related articles, suggest wikilinks
+  metrics [--history]           Show thinking quality score
+  research <topic>              Autonomous web research (single pass)
+  deep-research <topic>         Karpathy auto-research loop (iterative)
+  improve [--max-iterations N]  Self-improvement loop
 
 Pipeline:
   watch                         Watch Inbox/ (or use `neuron watch`)
   process                       Process pending Inbox/ files
   compile                       Compile raw sources into wiki
   lint                          Run wiki health checks
+  reindex                       Build/update semantic search index
   audit                         Security classification audit
   status                        Show KB stats and health
 

@@ -8,18 +8,29 @@ This is the knowledge base vault. All LLM agents (compile, lint, consolidate, in
 Inbox/           — Drop anything here. Auto-processed by brain CLI.
 Daily/           — Daily notes (Templater template, one per day)
 Dashboards/      — Dataview dashboards (read-only, auto-rendered)
+Brain-Index/     — Semantic search index (auto-generated, do not edit)
 memory/          — Working memory (context, preferences, projects, people)
 raw/             — Processed source material (from Inbox or ingest)
 wiki/
   concepts/      — Compiled knowledge articles
   summaries/     — Per-source summaries
-  queries/       — Filed Q&A and proactive insights
+  queries/       — Filed Q&A, research reports, gap questions
   sessions/      — Auto-extracted session learnings
 Archive/         — Processed Inbox items and retired content
-brain-cli/       — Node.js brain CLI (do not modify via LLM)
+brain-cli/       — Node.js brain CLI + provider abstraction + research engine
 scripts/         — Shell automation scripts
 templates/       — Obsidian Templater templates
 ```
+
+## Provider System
+
+LLM calls are routed through `brain-cli/providers.js` based on task tier:
+- **classify** — cheapest model (tagging, classification, session extraction)
+- **compile** — mid-tier (wiki compilation, summaries, connection finding)
+- **synthesize** — best model (deep analysis, research synthesis, insights)
+- **embed** — embedding model (semantic search indexing)
+
+Config in `brain-cli/neuron.config.json`. Default provider is `claude-cli`.
 
 ## Classification (mandatory)
 

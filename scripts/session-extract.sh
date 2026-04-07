@@ -55,7 +55,9 @@ echo "$TIMESTAMP — Extracting from session $SESSION_ID" >> "$LOG_FILE"
 # Use tail to get the most recent portion (last 200 lines) to stay within context
 TRANSCRIPT_EXCERPT=$(tail -200 "$TRANSCRIPT")
 
-claude --print "
+LLM_RUN="$KB_DIR/brain-cli/llm-run.js"
+
+node "$LLM_RUN" classify --stdin --tools "Write" <<PROMPT 2>&1 | tail -10 >> "$LOG_FILE"
 You are a session extraction agent. You read Claude Code conversation transcripts and extract valuable knowledge.
 
 ## Input
@@ -115,7 +117,7 @@ tags: [auto-extracted]
 - Keep: WHY decisions were made, WHAT went wrong and how it was fixed, WHO needs to be contacted.
 - If the session was trivial (just updates, simple lookups), write a 2-line summary and skip the sections.
 - classification is always PRIVATE for session extracts.
-" --allowedTools "Write" 2>&1 | tail -10 >> "$LOG_FILE"
+PROMPT
 
 # Mark as processed
 echo "$SESSION_ID" >> "$KB_DIR/scripts/.processed-sessions"
