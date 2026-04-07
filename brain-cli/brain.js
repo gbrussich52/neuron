@@ -638,6 +638,28 @@ const [,, command, ...args] = process.argv;
       case 'daily': await cmdDaily(); break;
       case 'insights': await cmdInsights(); break;
       default:
+        // Smart routing: if the command looks like a URL or file, ingest it
+        if (command && command.match(/^https?:\/\//)) {
+          log(`Auto-ingesting URL: ${command}`);
+          execFileSync('bash', [join(SCRIPTS, 'ingest.sh'), command, ...args], { stdio: 'inherit' });
+          break;
+        }
+        if (command && existsSync(command)) {
+          log(`Auto-ingesting file: ${command}`);
+          execFileSync('bash', [join(SCRIPTS, 'ingest.sh'), command, ...args], { stdio: 'inherit' });
+          break;
+        }
+        // If it's not a recognized command and not a URL/file, treat as a thought
+        if (command && command.length > 5 && !command.startsWith('-')) {
+          const fullThought = [command, ...args].join(' ');
+          log(`Auto-capturing thought: "${fullThought.slice(0, 60)}..."`);
+          const slug = fullThought.slice(0, 40).replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+          const ts = new Date().toISOString().replace(/[T:]/g, '-').slice(0, 19);
+          const outFile = join(INBOX, `${ts}_thought_${slug}.md`);
+          writeFileSync(outFile, fullThought);
+          log(`Saved to Inbox. Run \`neuron process\` to classify and file.`);
+          break;
+        }
         console.log(`
   neuron — LLM-powered second brain
 

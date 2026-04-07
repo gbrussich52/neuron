@@ -24,7 +24,21 @@ SCRIPTS_DIR="$KB_DIR/scripts"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 DATE_SLUG=$(date '+%Y-%m-%d_%H%M%S')
 
-ACTION="${1:-help}"
+# ── Smart Routing ──────────────────────────────────────────────
+# If the first argument looks like a URL or file path, skip the subcommand
+# and route it automatically. This makes `capture.sh <url>` just work.
+
+FIRST_ARG="${1:-help}"
+
+if [[ "$FIRST_ARG" =~ ^https?:// ]]; then
+  # It's a URL — route directly to ingest
+  exec "$KB_DIR/scripts/ingest.sh" "$@"
+elif [[ -f "$FIRST_ARG" && "$FIRST_ARG" != "help" ]]; then
+  # It's a file path — route to ingest
+  exec "$KB_DIR/scripts/ingest.sh" "$@"
+fi
+
+ACTION="$FIRST_ARG"
 shift || true
 
 # Project alias → memory directory mapping
