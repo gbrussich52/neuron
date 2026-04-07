@@ -1,269 +1,323 @@
-# Quick Reference Card
+# Getting Started with Neuron
 
-## Install (30 seconds)
-
-```bash
-git clone https://github.com/gbrussich52/neuron.git
-cd neuron && chmod +x setup.sh && ./setup.sh
-```
-
-## Commands at a Glance
-
-```
-# Capture
-capture.sh url <url> [tags]         Ingest a web article
-capture.sh file <path> [tags]       Ingest a local file
-capture.sh thought "text" [tags]    Capture an idea
-capture.sh decision "text" [proj]   Log a decision
-capture.sh gotcha "text" [proj]     Log a gotcha
-capture.sh braindump                Interactive brain dump
-
-# Knowledge
-capture.sh query "question"         Ask the wiki
-neuron smart-search "query"         Combined semantic + keyword search
-neuron search "query"               Full-text keyword search
-
-# Intelligence
-neuron insights                     Challenge assumptions, find gaps
-neuron research "topic"             Autonomous web research (single pass)
-neuron deep-research "topic"        Karpathy auto-research loop (iterative)
-neuron connections <file>           Find related articles, suggest wikilinks
-neuron improve --standalone         Self-improvement loop
-
-# Pipeline
-capture.sh compile                  Build wiki from sources
-capture.sh lint                     Health check + audit
-capture.sh audit                    Security scan
-neuron reindex                      Build semantic search index
-neuron metrics                      Brain Score (A-F grade)
-neuron config                       Show/change provider, models, features
-```
-
-**Project shortcuts:** `pap`, `ft`, or omit for global.
+A step-by-step guide to set up your second brain. No prior experience needed.
 
 ---
 
-## Your First 24 Hours
+## Part 1: Install (5 minutes)
 
-New to Neuron? Follow this path to go from zero to a working second brain.
+### 1. Clone and run setup
 
-### Hour 0: Setup (5 minutes)
+Open your terminal and paste:
 
 ```bash
 git clone https://github.com/gbrussich52/neuron.git
-cd neuron && chmod +x setup.sh && ./setup.sh
-
-# Optional: local models for zero API cost
-brew install ollama && brew services start ollama
-ollama pull gemma4:e2b && ollama pull nomic-embed-text
-neuron config provider openai-compatible   # switch to local
+cd neuron
+chmod +x setup.sh
+./setup.sh
 ```
 
-### Hour 1: Feed it (15 minutes)
+This creates `~/knowledge-base/` with everything you need.
 
-Drop 5 things into the system — mix of types:
+### 2. Choose your LLM engine (pick one)
+
+| Option | Cost | Speed | Setup |
+|--------|------|-------|-------|
+| **Claude Code CLI** (recommended) | Pay per use | Fast | Already installed if you use Claude Code |
+| **Ollama + Gemma 4** (local) | Free forever | Moderate | See below |
+| **Anthropic API key** | Pay per use | Fast | Set `ANTHROPIC_API_KEY` env var |
+
+**To set up local models (free, runs on your Mac):**
 
 ```bash
-# Brain dump something you've been thinking about
+brew install ollama
+brew services start ollama
+ollama pull gemma4:e2b           # Small model for quick tasks
+ollama pull gemma4:e4b           # Larger model for deep thinking
+ollama pull nomic-embed-text     # For semantic search
+
+# Tell Neuron to use local models:
+cd ~/knowledge-base/brain-cli
+node brain.js config provider openai-compatible
+```
+
+---
+
+## Part 2: Set Up Obsidian (2 minutes)
+
+Obsidian is how you browse and interact with your knowledge base visually. Neuron writes the files, Obsidian displays them.
+
+### 1. Open the vault
+
+1. Open **Obsidian**
+2. Click the **vault icon** (bottom-left corner)
+3. Click **"Open folder as vault"**
+4. Navigate to your home folder and select **`knowledge-base`**
+
+You should see folders like `wiki/`, `Dashboards/`, `Notes/`, `memory/` in the left sidebar.
+
+### 2. Install required plugins
+
+1. Click the **gear icon** (bottom-left) to open Settings
+2. Go to **Community plugins**
+3. Click **"Turn on community plugins"** (if prompted)
+4. Click **Browse** and search for:
+   - **Dataview** — install and enable (powers the dashboards)
+   - **Templater** — install and enable (powers daily notes)
+5. Close Settings
+
+### 3. Enable the classification badges
+
+These color-code your files: green = PUBLIC, orange = PRIVATE, red = CONFIDENTIAL.
+
+1. Settings → **Appearance**
+2. Scroll to the bottom → **CSS snippets**
+3. Click the **refresh icon** (circular arrow) if you don't see anything
+4. Toggle **classification-badges** ON
+
+### 4. See your knowledge graph
+
+Press **Cmd+G** (Mac) or **Ctrl+G** (Windows/Linux). This shows all your articles as connected nodes. The more you add, the richer this gets.
+
+---
+
+## Part 3: Add Your First Content (10 minutes)
+
+You have **three ways** to add content. Use whichever feels natural:
+
+### Way 1: Write in Obsidian (easiest)
+
+1. In Obsidian, open the **`Notes/`** folder in the sidebar
+2. Create a new note (Cmd+N)
+3. **Just write.** No special format needed. Brain dumps, ideas, links, whatever.
+4. Every night at 10pm, Neuron automatically sweeps `Notes/` into the processing pipeline
+
+This is the "zero friction" path. Write like you're texting yourself.
+
+### Way 2: Use the terminal
+
+```bash
+# Brain dump — type freely, press Ctrl+D when done
 neuron braindump
 
-# Ingest a few articles or videos you've read recently
-capture.sh url https://some-article-you-liked.com research
-capture.sh youtube https://youtube.com/watch?v=something learning
+# Quick thought
+capture.sh thought "I think we should price the starter tier at $29/mo" business
 
-# Capture a thought and a decision
-capture.sh thought "I think X because Y" business
-capture.sh decision "Going with approach A over B because..." pap
+# Save a web article
+capture.sh url https://interesting-article.com/thing ai,research
+
+# Save a YouTube video (auto-extracts transcript)
+capture.sh youtube https://youtube.com/watch?v=abc123 learning
 ```
 
-### Hour 2: Compile + Explore (5 minutes)
+### Way 3: Tell Claude
 
-```bash
-capture.sh compile     # LLM compiles everything into wiki articles
-neuron status          # See what was created
-```
+In any Claude Code session, just say:
 
-Open `~/knowledge-base/` in Obsidian and browse your new wiki.
+> "Add this to neuron: I realized that PFAS filtration has a 40% margin opportunity in Westchester because no local competitor offers whole-house RO systems."
 
-### Hour 3: Search + Question (5 minutes)
-
-```bash
-# Build the semantic index
-neuron reindex
-
-# Search conceptually (not just keywords)
-neuron smart-search "business opportunities"
-
-# Ask a question — the answer gets filed back into the wiki
-capture.sh query "What are the key tradeoffs in my current projects?"
-```
-
-### Hour 6: Let it think for you (5 minutes)
-
-```bash
-neuron insights        # Challenge your assumptions, find knowledge gaps
-neuron daily           # Morning briefing based on your current context
-neuron metrics         # See your Brain Score
-```
-
-### Hour 12: Autonomous research (set and forget)
-
-```bash
-# Single-pass research on a topic
-export TAVILY_API_KEY=tvly-...   # get a key at tavily.com (free tier available)
-neuron research "your topic here"
-
-# Or go deep — iterative loop that researches its own gaps
-neuron deep-research "your topic" --max-iterations 3
-```
-
-### Hour 24: Self-improvement
-
-```bash
-# Let Neuron improve itself — compile, lint, research gaps, repeat
-neuron improve --standalone --max-iterations 2
-neuron metrics --history   # See the score trend
-```
-
-### From then on
-
-Just keep dropping things in. The system handles the rest:
-- **Monday 9am:** Memory consolidation
-- **Wednesday 9am:** Auto-compile + lint
-- **Every session end:** Auto-extract learnings (if hook is configured)
-- **You:** Drop sources, ask questions, run research. Everything compounds.
+Claude will file it with proper tags, classification, and wikilinks.
 
 ---
 
-## Example: Building a Knowledge Base from Scratch
+## Part 4: Compile Your Wiki (1 minute)
 
-Here's a real-world walkthrough — say you're researching **AI agent architectures** for a new project.
-
-### Step 1: Ingest sources (2 minutes)
-
-```bash
-# Grab key articles
-capture.sh url https://lilianweng.github.io/posts/2023-06-23-agent/ ai,agents
-capture.sh url https://www.anthropic.com/research/building-effective-agents ai,agents,anthropic
-capture.sh url https://arxiv.org/abs/2308.08155 ai,agents,survey
-
-# Add a local paper you downloaded
-capture.sh file ~/Downloads/react-agent-paper.pdf ai,agents
-
-# Capture your own thinking
-capture.sh thought "ReAct pattern seems best for tool-use agents, but plan-and-execute might be better for long-horizon tasks" ai,agents
-```
-
-### Step 2: Compile (1 command)
+Once you've added a few things, compile them into structured wiki articles:
 
 ```bash
 capture.sh compile
 ```
 
-The LLM reads all 5 sources, creates:
-- `wiki/summaries/` — one summary per source with key takeaways
-- `wiki/concepts/` — cross-linked articles like `agent-architectures.md`, `react-pattern.md`, `tool-use.md`
-- `wiki/index.md` — updated master index with everything linked
+**What happens:** The LLM reads all your raw inputs, creates organized articles in `wiki/concepts/`, generates summaries, adds `[[wikilinks]]` between related topics, and updates the master index.
 
-### Step 3: Ask questions (compounds over time)
+Open Obsidian and browse `wiki/concepts/` to see your new articles. Click any `[[wikilink]]` to jump between them.
+
+---
+
+## Part 5: Explore and Search (5 minutes)
+
+### Search your knowledge
 
 ```bash
-capture.sh query "What are the tradeoffs between ReAct and Plan-and-Execute agent patterns?"
+# Keyword search (fast, exact matches)
+neuron search "water filtration"
+
+# Smart search (finds conceptual matches, not just keywords)
+neuron reindex                              # Build the search index (first time only)
+neuron smart-search "business opportunities"  # Finds related articles even without exact words
 ```
 
-The answer gets **filed back** into `wiki/queries/`. Next time you query about agents, this prior answer is part of the knowledge base.
-
-### Step 4: Let it maintain itself
+### Ask questions
 
 ```bash
-capture.sh lint
+capture.sh query "What are the tradeoffs in my current business ideas?"
 ```
 
-The linter finds:
-- Broken `[[wikilinks]]` between articles
-- Concepts mentioned but not yet article-ized
-- Contradictions between sources
-- Suggests 3 new articles to explore
+The answer gets saved to `wiki/queries/` — so it becomes part of your knowledge base. Every question makes the system smarter.
 
-### Step 5: Check security
+### Get insights
 
 ```bash
-capture.sh audit
-
-# Output:
-# === Classification Audit ===
-# Checking for missing classifications...
-# Scanning for potential secrets...
-# Checking CONFIDENTIAL files are git-ignored...
-# === Results ===
-# ALL CLEAR: Every file is classified, no credentials detected.
+neuron insights     # Challenges your assumptions, finds knowledge gaps
+neuron daily        # Morning briefing: what's active, open questions, connections
 ```
 
 ---
 
-## The Compounding Loop
+## Part 6: Let It Research for You (optional)
+
+Neuron can autonomously research topics on the web and compile the results into your wiki.
+
+**Requires a free Tavily API key** — get one at [tavily.com](https://tavily.com).
+
+```bash
+export TAVILY_API_KEY=tvly-your-key-here
+
+# Quick research (single pass, ~30 seconds)
+neuron research "PFAS water filtration regulations 2026"
+
+# Deep research (iterative — researches, finds gaps, researches gaps, repeats)
+neuron deep-research "PFAS remediation technologies" --max-iterations 3
+```
+
+---
+
+## Part 7: Track Your Progress
+
+### Brain Score
+
+```bash
+neuron metrics              # Current score (A through F)
+neuron metrics --history    # Score trend over time
+```
+
+In Obsidian, open **`Dashboards/Brain-Score.md`** for a visual dashboard.
+
+### Self-improvement
+
+```bash
+# Let Neuron improve itself: compile → lint → research gaps → repeat
+neuron improve --standalone --max-iterations 2
+```
+
+---
+
+## Daily Workflow (Once Set Up)
+
+Here's what a typical day looks like:
+
+| When | What | How |
+|------|------|-----|
+| **Morning** | Check daily briefing | `neuron daily` or open `Daily/` in Obsidian |
+| **Throughout the day** | Capture ideas | Write in `Notes/` in Obsidian, or `capture.sh thought "..."` |
+| **When you find something interesting** | Save it | `capture.sh url <link>` or paste into `Notes/` |
+| **When curious** | Ask or research | `capture.sh query "..."` or `neuron research "..."` |
+| **10:00 PM (automatic)** | Notes swept | `Notes/` → `Inbox/` for processing |
+| **Monday 9am (automatic)** | Memory consolidation | Prunes, merges, promotes session learnings |
+| **Wednesday 9am (automatic)** | Wiki compile + lint | New sources compiled, health check run |
+
+You don't have to do anything for the automated parts. They just run.
+
+---
+
+## Command Cheatsheet
+
+### Capture (put things in)
 
 ```
-  You work / browse / think
-    ↓
-  Drop anything into Inbox/ or use capture.sh
-    ↓
-  Neuron CLI processes → routes to raw/
-    ↓
-  compile.sh → wiki articles with [[wikilinks]]
-    ↓
-  connections.js → auto cross-links related articles
-    ↓
-  Session ends → auto-extract learnings
-    ↓
-  Monday → consolidation promotes best bits to memory
-    ↓
-  Wednesday → compile + lint + reindex
-    ↓
-  You query → answer filed back → wiki gets richer
-    ↓
-  neuron improve → researches its own gaps → recompiles
-    ↓
-  metrics → Brain Score tracks if you're getting smarter
-    ↓
-  Repeat. Every cycle makes the next one better.
+capture.sh url <url> [tags]         Save a web article
+capture.sh youtube <url> [tags]     Save a YouTube video (auto-transcript)
+capture.sh file <path> [tags]       Save a local file
+capture.sh thought "text" [tags]    Quick thought capture
+capture.sh decision "text" [proj]   Log a decision (with project tag)
+capture.sh gotcha "text" [proj]     Log a gotcha/trap
+neuron braindump                    Interactive brain dump (type freely)
+```
+
+Or just create a note in `Notes/` in Obsidian. No commands needed.
+
+### Search and ask (get things out)
+
+```
+neuron search "query"               Keyword search
+neuron smart-search "query"         Smart search (semantic + keyword)
+capture.sh query "question"         Ask a question (answer saved to wiki)
+```
+
+### Intelligence (let it think)
+
+```
+neuron insights                     Challenge assumptions, find gaps
+neuron daily                        Morning briefing
+neuron research "topic"             Web research (single pass)
+neuron deep-research "topic"        Deep research (iterative loop)
+neuron connections <file>           Find related articles
+neuron improve --standalone         Self-improvement loop
+```
+
+### System
+
+```
+neuron status                       KB health and stats
+neuron metrics                      Brain Score (A-F grade)
+neuron config                       Show provider, models, features
+neuron config provider <name>       Switch LLM provider
+neuron reindex                      Rebuild semantic search index
+capture.sh compile                  Compile raw sources → wiki
+capture.sh lint                     Wiki health check
+capture.sh audit                    Security scan
+```
+
+---
+
+## Folder Guide
+
+When you open the vault in Obsidian, here's what each folder is for:
+
+```
+Notes/          Write anything here. No rules. Swept to Inbox nightly.
+Inbox/          Drop files here for processing. Or use capture.sh.
+Daily/          Daily briefing notes (generated by neuron daily).
+Dashboards/     Visual dashboards — Brain Score, Knowledge Evolution.
+wiki/
+  concepts/     Your compiled knowledge articles. The core of your brain.
+  summaries/    One summary per source you've ingested.
+  queries/      Answers to your questions + research reports.
+  sessions/     Learnings auto-extracted from Claude Code sessions.
+memory/         Working context — what the LLM "remembers" about you.
+raw/            Processed source material (before compilation).
+Brain-Index/    Semantic search data (auto-generated, don't edit).
+Archive/        Old processed items (historical record).
 ```
 
 ---
 
 ## Classification Quick Reference
 
-| Label | Color | Meaning | Can I share it? |
-|-------|-------|---------|----------------|
+Every file has a security label. This is enforced automatically.
+
+| Label | Color in Obsidian | Meaning | Can I share it? |
+|-------|-------------------|---------|-----------------|
 | `PUBLIC` | Green | General knowledge | Yes — blog, tweet, open-source |
-| `PRIVATE` | Orange | Personal context | No — local only |
-| `CONFIDENTIAL` | Red | Credentials, PII | Never — not even screenshots |
+| `PRIVATE` | Orange | Personal context | No — stays on your machine |
+| `CONFIDENTIAL` | Red | Passwords, PII, secrets | Never — not even screenshots |
 
-Every `.md` file needs this in its frontmatter:
-```yaml
----
-classification: PUBLIC
----
-```
+When you write in `Notes/`, don't worry about this. Neuron adds classification automatically when it processes your notes (defaults to PRIVATE).
 
 ---
 
-## Directory Map
+## Troubleshooting
 
-```
-~/knowledge-base/
-├── Inbox/           ← Drop anything here — auto-processed
-├── Brain-Index/     ← Semantic search embeddings (auto-generated)
-├── Dashboards/      ← Brain Score + Knowledge Evolution (Obsidian)
-├── memory/          ← What the LLM "remembers" about you
-├── raw/             ← Processed source material
-├── wiki/
-│   ├── concepts/    ← Compiled knowledge articles
-│   ├── summaries/   ← Per-source summaries
-│   ├── queries/     ← Your Q&A + research reports (compounds!)
-│   └── sessions/    ← Auto-extracted session learnings
-├── brain-cli/       ← Neuron CLI + provider abstraction
-└── scripts/         ← Shell automation
-```
+**"No semantic index found"** — Run `neuron reindex` first. This builds the search index.
 
-Open in **Obsidian** for the best experience: `File → Open Vault → ~/knowledge-base/`
+**Dashboards show code instead of tables** — Install the **Dataview** plugin in Obsidian (see Part 2 above).
+
+**"Claude Code CLI not found"** — Either install Claude Code, or switch to local models with `neuron config provider openai-compatible`.
+
+**Nothing in `wiki/concepts/`** — Run `capture.sh compile` to compile your raw sources into wiki articles.
+
+**Brain Score is low** — Run `neuron improve --standalone --max-iterations 2` to compile, lint, and research gaps automatically.
+
+---
+
+*See [README.md](README.md) for the full feature list, architecture details, and contributing guide.*

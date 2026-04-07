@@ -75,7 +75,7 @@ mkdir -p "$KB_DIR"/{Inbox,Archive,Daily,Dashboards,Brain-Index,raw,wiki/{concept
 
 # Copy scripts
 info "Installing scripts..."
-for script in capture.sh compile.sh lint.sh query.sh ingest.sh session-extract.sh session-hook.sh classify-check.sh consolidate.sh auto-commit.sh sync.sh; do
+for script in capture.sh compile.sh lint.sh query.sh ingest.sh session-extract.sh session-hook.sh classify-check.sh consolidate.sh auto-commit.sh sync.sh notes-sweep.sh; do
   if [[ -f "$SCRIPTS_SRC/$script" ]]; then
     sed "s|\$HOME/knowledge-base|$KB_DIR|g" "$SCRIPTS_SRC/$script" > "$KB_DIR/scripts/$script"
     chmod +x "$KB_DIR/scripts/$script"
@@ -105,6 +105,24 @@ touch "$KB_DIR/scripts/compile.log"
 touch "$KB_DIR/scripts/lint.log"
 touch "$KB_DIR/scripts/session-extract.log"
 touch "$KB_DIR/scripts/consolidate.log"
+
+# Create Notes/ readme
+if [[ ! -f "$KB_DIR/Notes/.about.md" ]]; then
+  cat > "$KB_DIR/Notes/.about.md" <<'NOTESREADME'
+---
+classification: PUBLIC
+type: readme
+---
+
+# Notes
+
+Unstructured brain dump zone. Write anything here — no frontmatter needed, no format required.
+
+A nightly sweep moves everything from Notes/ to Inbox/ where neuron processes, classifies, and compiles it into the wiki.
+
+Just create a new note and start typing.
+NOTESREADME
+fi
 
 # Install templates
 info "Creating template files..."
@@ -233,9 +251,28 @@ PLIST
 </plist>
 PLIST
 
+  # Nightly 10pm — sweep Notes/ → Inbox/
+  cat > "$PLIST_DIR/com.llm-kb.notes-sweep.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.llm-kb.notes-sweep</string>
+    <key>ProgramArguments</key>
+    <array><string>/bin/bash</string><string>$KB_DIR/scripts/notes-sweep.sh</string></array>
+    <key>StartCalendarInterval</key>
+    <dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
+    <key>StandardOutPath</key><string>$KB_DIR/scripts/notes-sweep-stdout.log</string>
+    <key>StandardErrorPath</key><string>$KB_DIR/scripts/notes-sweep-stderr.log</string>
+    <key>RunAtLoad</key><false/>
+</dict>
+</plist>
+PLIST
+
   launchctl load "$PLIST_DIR/com.llm-kb.consolidation.plist" 2>/dev/null || true
   launchctl load "$PLIST_DIR/com.llm-kb.compile-lint.plist" 2>/dev/null || true
-  info "Automation scheduled: consolidation (Mon 9am), compile+lint (Wed 9am)"
+  launchctl load "$PLIST_DIR/com.llm-kb.notes-sweep.plist" 2>/dev/null || true
+  info "Automation scheduled: notes sweep (10pm), consolidation (Mon 9am), compile+lint (Wed 9am)"
 
 elif [[ "$(uname)" == "Linux" ]]; then
   info "Setting up weekly automation via cron..."

@@ -197,6 +197,7 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 │   ├── summaries/             # Per-source summaries
 │   ├── queries/               # Filed Q&A, research reports, gap questions
 │   └── sessions/              # Auto-extracted session learnings  [PRIVATE]
+├── Notes/                     # Unstructured brain dumps (swept to Inbox nightly)
 ├── Archive/                   # Processed inbox items, retired content
 ├── brain-cli/                 # Node.js Neuron CLI
 │   ├── brain.js               # Main CLI (16 commands)
@@ -218,7 +219,8 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 │   ├── consolidate.sh         # Memory pruning + session promotion
 │   ├── classify-check.sh      # Classification + credential audit
 │   ├── auto-commit.sh         # Smart git commits with LLM messages
-│   └── sync.sh                # Cross-device git + git-crypt sync
+│   ├── sync.sh                # Cross-device git + git-crypt sync
+│   └── notes-sweep.sh         # Nightly sweep: Notes/ → Inbox/
 ├── templates/                 # Obsidian Templater templates
 └── CLAUDE.md                  # Vault rules for LLM agents
 ```
@@ -228,6 +230,7 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 | Trigger | What happens |
 |---------|-------------|
 | Every session end | Learnings extracted → `wiki/sessions/` |
+| Nightly 10pm | `Notes/` swept → `Inbox/` for processing |
 | Monday 9am | Memory consolidation + session promotion |
 | Wednesday 9am | KB compile + lint + classification audit |
 
@@ -321,7 +324,9 @@ Neuron is a concrete implementation that merges ideas from several sources. Each
 
 ## Quick Start Guide
 
-See **[QUICKSTART.md](QUICKSTART.md)** for a visual reference card, command cheatsheet, and a full walkthrough example.
+**New to Neuron?** Start here: **[QUICKSTART.md](QUICKSTART.md)**
+
+Step-by-step guide covering install, Obsidian setup, your first content, search, research, and daily workflow. No prior experience needed.
 
 ## Contributing
 
