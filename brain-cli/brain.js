@@ -465,6 +465,11 @@ async function cmdSemanticSearch(query) {
   }
 }
 
+async function cmdSmartSearch(query) {
+  const { smartSearch } = await import(join(__dirname, 'semantic.js'));
+  await smartSearch(query);
+}
+
 async function cmdReindex() {
   const { buildIndex } = await import(join(__dirname, 'semantic.js'));
   await buildIndex();
@@ -478,6 +483,106 @@ async function cmdConnections(filePath) {
 async function cmdMetrics(showHistory) {
   const { displayMetrics } = await import(join(__dirname, 'metrics.js'));
   await displayMetrics(showHistory);
+}
+
+function cmdConfig(args) {
+  const configPath = join(__dirname, 'neuron.config.json');
+  const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+  const sub = args[0];
+
+  if (!sub || sub === 'show') {
+    console.log(`
+=== Neuron Config ===
+
+  Provider:     ${config.provider}
+  Tiers:
+    classify    → ${config.tiers.classify.models[config.provider] || '(not set)'}
+    compile     → ${config.tiers.compile.models[config.provider] || '(not set)'}
+    synthesize  → ${config.tiers.synthesize.models[config.provider] || '(not set)'}
+    embed       → ${config.tiers.embed.models[config.tiers.embed.embed_provider] || '(not set)'} (via ${config.tiers.embed.embed_provider})
+
+  Features:
+${Object.entries(config.features).map(([k, v]) => `    ${k}: ${v ? 'ON' : 'off'}`).join('\n')}
+
+  Config file: ${configPath}
+`);
+    return;
+  }
+
+  if (sub === 'provider') {
+    const newProvider = args[1];
+    if (!newProvider) {
+      console.log(`Current provider: ${config.provider}`);
+      console.log(`Available: ${Object.keys(config.providers).join(', ')}`);
+      console.log(`Usage: neuron config provider <name>`);
+      return;
+    }
+    if (!config.providers[newProvider]) {
+      console.error(`Unknown provider: ${newProvider}`);
+      console.error(`Available: ${Object.keys(config.providers).join(', ')}`);
+      return;
+    }
+    config.provider = newProvider;
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+    console.log(`Provider switched to: ${newProvider}`);
+    // Show what models this maps to
+    console.log(`  classify    → ${config.tiers.classify.models[newProvider] || '(not configured)'}`);
+    console.log(`  compile     → ${config.tiers.compile.models[newProvider] || '(not configured)'}`);
+    console.log(`  synthesize  → ${config.tiers.synthesize.models[newProvider] || '(not configured)'}`);
+    return;
+  }
+
+  if (sub === 'feature') {
+    const feature = args[1];
+    const value = args[2];
+    if (!feature || !value) {
+      console.log('Usage: neuron config feature <name> <on|off>');
+      console.log(`Features: ${Object.keys(config.features).join(', ')}`);
+      return;
+    }
+    if (!(feature in config.features)) {
+      console.error(`Unknown feature: ${feature}`);
+      return;
+    }
+    config.features[feature] = value === 'on' || value === 'true';
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+    console.log(`Feature ${feature}: ${config.features[feature] ? 'ON' : 'off'}`);
+    return;
+  }
+
+  if (sub === 'model') {
+    const tier = args[1];
+    const model = args[2];
+    if (!tier || !model) {
+      console.log('Usage: neuron config model <tier> <model-name>');
+      console.log('Tiers: classify, compile, synthesize');
+      console.log('Example: neuron config model compile gemma4:e4b');
+      return;
+    }
+    if (!config.tiers[tier]) {
+      console.error(`Unknown tier: ${tier}`);
+      return;
+    }
+    config.tiers[tier].models[config.provider] = model;
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+    console.log(`${tier} model (${config.provider}): ${model}`);
+    return;
+  }
+
+  console.log(`
+Usage: neuron config <subcommand>
+
+  show                          Show current config
+  provider <name>               Switch LLM provider (claude-cli, anthropic-api, openai-compatible)
+  feature <name> <on|off>       Toggle a feature flag
+  model <tier> <model-name>     Set model for a tier (classify, compile, synthesize)
+
+Examples:
+  neuron config provider openai-compatible    # Switch to Ollama/local
+  neuron config provider claude-cli           # Switch back to Claude
+  neuron config feature semantic_search on    # Enable semantic search
+  neuron config model compile gemma4:e4b      # Use Gemma 4 for compilation
+`);
 }
 
 async function cmdResearch(topic) {
@@ -515,12 +620,14 @@ const [,, command, ...args] = process.argv;
       case 'braindump': case 'dump': cmdBraindump(); break;
       case 'search': cmdSearch(args.join(' ')); break;
       case 'semantic-search': await cmdSemanticSearch(args.join(' ')); break;
+      case 'smart-search': await cmdSmartSearch(args.join(' ')); break;
       case 'reindex': await cmdReindex(); break;
       case 'connections': await cmdConnections(args[0]); break;
       case 'metrics': await cmdMetrics(args.includes('--history')); break;
       case 'research': await cmdResearch(args.join(' ')); break;
       case 'deep-research': await cmdDeepResearch(args); break;
       case 'improve': await cmdImprove(args); break;
+      case 'config': cmdConfig(args); break;
       case 'status': cmdStatus(); break;
       case 'daily': await cmdDaily(); break;
       case 'insights': await cmdInsights(); break;
@@ -537,7 +644,8 @@ const [,, command, ...args] = process.argv;
 
   Search:
     search <query>      Full-text search (ripgrep) across KB
-    semantic-search <q> Semantic/vector search (requires reindex)
+    smart-search <q>    Combined semantic + keyword search (best results)
+    semantic-search <q> Pure semantic/vector search
     reindex             Build or update the semantic search index
 
   Intelligence:
@@ -549,6 +657,12 @@ const [,, command, ...args] = process.argv;
                         --max-iterations N  --ralph (use Ralph Loop)
     improve [opts]      Self-improvement loop (compile→lint→research→repeat)
                         --max-iterations N  --standalone  --target-grade A-F
+
+  Config:
+    config                Show current provider, models, features
+    config provider <p>   Switch LLM provider (claude-cli, openai-compatible, ...)
+    config feature <f> on Toggle feature flags
+    config model <t> <m>  Set model for a tier
 
   Drop anything into ~/knowledge-base/Inbox/ — it gets auto-processed.
   URLs, YouTube links, text files, PDFs, images — all handled.

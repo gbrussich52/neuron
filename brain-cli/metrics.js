@@ -102,6 +102,14 @@ export function computeMetrics() {
   // Gap questions generated
   const gapQuestions = queries.filter(q => q.content.includes('type: gap-questions')).length;
 
+  // Research reports generated
+  const researchReports = queries.filter(q =>
+    q.content.includes('type: research-report') || q.content.includes('type: deep-research-report')
+  ).length;
+
+  // "Related" sections added by connection finder
+  const articlesWithRelated = allArticles.filter(a => a.content.includes('## Related')).length;
+
   // Lint health (check for lint-report.md)
   let lintGrade = 'N/A';
   const lintReport = join(KB_DIR, 'wiki', 'lint-report.md');
@@ -110,6 +118,16 @@ export function computeMetrics() {
     const gradeMatch = lintContent.match(/(?:grade|score|health)[:\s]*([A-F])/i);
     if (gradeMatch) lintGrade = gradeMatch[1].toUpperCase();
   }
+
+  // Delta tracking — compare against last snapshot
+  const snapshots = loadSnapshots();
+  const lastSnapshot = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+  const deltas = lastSnapshot ? {
+    conceptsDelta: concepts.length - (lastSnapshot.counts?.concepts || 0),
+    linksDelta: totalLinks - (lastSnapshot.connections?.totalWikilinks || 0),
+    contradictionsDelta: contradictions - (lastSnapshot.connections?.contradictions || 0),
+    queriesDelta: queries.length - (lastSnapshot.counts?.queries || 0),
+  } : null;
 
   return {
     timestamp: new Date().toISOString(),
@@ -125,17 +143,20 @@ export function computeMetrics() {
       linkDensity: Math.round(linkDensity * 10) / 10,
       contradictions,
       supports,
+      articlesWithRelated,
     },
     weekly: {
       newConcepts: newConceptsThisWeek,
       newQueries: newQueriesThisWeek,
       newSessions: newSessionsThisWeek,
       gapQuestions,
+      researchReports,
     },
     health: {
       lintGrade,
       compilationLag: uncompiledCount,
     },
+    deltas,
   };
 }
 
@@ -219,22 +240,26 @@ export async function displayMetrics(showHistory = false) {
 
   const gradeBar = '='.repeat(Math.round(score / 5)) + '-'.repeat(20 - Math.round(score / 5));
 
+  const d = metrics.deltas;
+  const delta = (val) => val > 0 ? ` (+${val})` : val < 0 ? ` (${val})` : '';
+
   console.log(`
 === Neuron Brain Score ===
 
   Grade: ${grade} [${gradeBar}] ${score}/100
 
   Content:
-    Concepts:      ${metrics.counts.concepts}
+    Concepts:      ${metrics.counts.concepts}${d ? delta(d.conceptsDelta) : ''}
     Summaries:     ${metrics.counts.summaries}
-    Queries:       ${metrics.counts.queries}
+    Queries:       ${metrics.counts.queries}${d ? delta(d.queriesDelta) : ''}
     Sessions:      ${metrics.counts.sessions}
     Uncompiled:    ${metrics.counts.uncompiled}
 
   Connections:
-    Total links:   ${metrics.connections.totalWikilinks}
+    Total links:   ${metrics.connections.totalWikilinks}${d ? delta(d.linksDelta) : ''}
     Per article:   ${metrics.connections.linkDensity}
-    Contradicts:   ${metrics.connections.contradictions}
+    Cross-linked:  ${metrics.connections.articlesWithRelated} articles with Related section
+    Contradicts:   ${metrics.connections.contradictions}${d ? delta(d.contradictionsDelta) : ''}
     Supports:      ${metrics.connections.supports}
 
   This Week:
@@ -242,6 +267,7 @@ export async function displayMetrics(showHistory = false) {
     New queries:   ${metrics.weekly.newQueries}
     New sessions:  ${metrics.weekly.newSessions}
     Gap questions: ${metrics.weekly.gapQuestions}
+    Research rpts: ${metrics.weekly.researchReports}
 
   Health:
     Lint grade:    ${metrics.health.lintGrade}

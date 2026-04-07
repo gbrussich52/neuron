@@ -188,8 +188,16 @@ EOF
     exec "$SCRIPTS_DIR/lint.sh"
     ;;
 
+  smart-search)
+    exec node "$KB_DIR/brain-cli/brain.js" smart-search "$@"
+    ;;
+
   semantic-search)
     exec node "$KB_DIR/brain-cli/brain.js" semantic-search "$@"
+    ;;
+
+  config)
+    exec node "$KB_DIR/brain-cli/brain.js" config "$@"
     ;;
 
   reindex)

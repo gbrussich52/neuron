@@ -376,3 +376,125 @@ export async function searchQuiet(query, topK = 5) {
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, topK);
 }
+
+/**
+ * Smart search — combines semantic search with keyword fallback.
+ * Returns ranked, deduplicated results with context snippets.
+ *
+ * Strategy:
+ *   1. Run semantic search (embeddings) for conceptual matches
+ *   2. Run ripgrep keyword search for exact matches
+ *   3. Merge, deduplicate by file, boost files that appear in both
+ *   4. Return with highlighted context snippets
+ *
+ * @param {string} query - Search query
+ * @param {number} [topK=8] - Max results to return
+ */
+export async function smartSearch(query, topK = 8) {
+  if (!query) {
+    console.log('Usage: neuron smart-search <query>');
+    return [];
+  }
+
+  console.log(`[neuron] Smart search: "${query}"\n`);
+
+  const results = new Map(); // file → { score, heading, text, sources[] }
+
+  // 1. Semantic search (if index exists)
+  const index = loadIndex();
+  if (index.chunks.length > 0) {
+    try {
+      const [queryEmbedding] = await embed(query);
+      const semanticResults = index.chunks
+        .map(chunk => ({
+          score: cosineSimilarity(queryEmbedding, chunk.embedding),
+          heading: chunk.heading,
+          text: chunk.text,
+          file: chunk.file,
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topK);
+
+      for (const r of semanticResults) {
+        if (r.score < 0.25) continue;
+        const existing = results.get(r.file);
+        if (!existing || r.score > existing.score) {
+          results.set(r.file, {
+            score: r.score,
+            heading: r.heading,
+            snippet: r.text.slice(0, 200).replace(/\n/g, ' '),
+            file: r.file,
+            sources: ['semantic'],
+          });
+        }
+      }
+    } catch {
+      // Embedding failed, continue with keyword only
+    }
+  }
+
+  // 2. Keyword search via ripgrep
+  try {
+    const { execFileSync } = await import('child_process');
+    const rgResult = execFileSync('rg', [
+      '-i', '-l', '--glob', '*.md',
+      '-g', '!node_modules', '-g', '!.obsidian', '-g', '!Brain-Index',
+      query, KB_DIR,
+    ], { encoding: 'utf-8', maxBuffer: 1024 * 1024 });
+
+    const keywordFiles = rgResult.trim().split('\n').filter(Boolean);
+
+    for (const absPath of keywordFiles.slice(0, topK)) {
+      const relPath = relative(KB_DIR, absPath);
+
+      // Get a context snippet around the match
+      let snippet = '';
+      try {
+        const contextResult = execFileSync('rg', [
+          '-i', '-C', '1', '--max-count', '1', query, absPath,
+        ], { encoding: 'utf-8', maxBuffer: 1024 * 1024 });
+        snippet = contextResult.trim().slice(0, 200).replace(/\n/g, ' ');
+      } catch { /* no context */ }
+
+      const existing = results.get(relPath);
+      if (existing) {
+        // Boost score for files found by both methods
+        existing.score = Math.min(1.0, existing.score * 1.3);
+        existing.sources.push('keyword');
+        if (!existing.snippet && snippet) existing.snippet = snippet;
+      } else {
+        results.set(relPath, {
+          score: 0.4, // baseline score for keyword-only matches
+          heading: basename(relPath, '.md').replace(/-/g, ' '),
+          snippet: snippet || '(keyword match)',
+          file: relPath,
+          sources: ['keyword'],
+        });
+      }
+    }
+  } catch {
+    // ripgrep found nothing or errored
+  }
+
+  // 3. Sort by score, display
+  const ranked = [...results.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+
+  if (ranked.length === 0) {
+    console.log('  No results found.');
+    return [];
+  }
+
+  for (const [i, r] of ranked.entries()) {
+    const pct = (r.score * 100).toFixed(0);
+    const tags = r.sources.join('+');
+    console.log(`  ${i + 1}. [${pct}% ${tags}] ${r.file}`);
+    console.log(`     ${r.heading}`);
+    console.log(`     ${r.snippet}...`);
+    console.log('');
+  }
+
+  console.log(`  ${ranked.length} result(s) — sources: ${index.chunks.length > 0 ? 'semantic+keyword' : 'keyword only'}`);
+  return ranked;
+}
