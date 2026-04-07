@@ -17,7 +17,7 @@ wiki/
   queries/       — Filed Q&A, research reports, gap questions
   sessions/      — Auto-extracted session learnings
 Archive/         — Processed Inbox items and retired content
-brain-cli/       — Node.js brain CLI + provider abstraction + research engine
+brain-cli/       — Neuron CLI, LLM provider abstraction, search, research, metrics
 scripts/         — Shell automation scripts
 templates/       — Obsidian Templater templates
 ```

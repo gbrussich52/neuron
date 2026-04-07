@@ -107,7 +107,8 @@ neuron daily              # Generate today's daily note
 
 # Search
 neuron search "query"             # Full-text search (ripgrep)
-neuron semantic-search "query"    # Semantic/vector search (requires reindex)
+neuron smart-search "query"       # Combined semantic + keyword (best results)
+neuron semantic-search "query"    # Pure semantic/vector search
 neuron reindex                    # Build or update semantic search index
 
 # Intelligence
@@ -118,6 +119,12 @@ neuron metrics --history          # Show score trends over time
 neuron research "topic"           # Autonomous web research (single pass)
 neuron deep-research "topic"      # Karpathy auto-research loop (iterative)
 neuron improve --standalone       # Self-improvement loop (compile→lint→research→repeat)
+
+# Config
+neuron config                     # Show current provider, models, features
+neuron config provider openai-compatible  # Switch to local Ollama
+neuron config feature semantic_search on  # Toggle features
+neuron config model compile gemma4:e4b    # Set tier model
 
 # Pipeline
 capture.sh compile       # Compile raw → wiki
@@ -192,7 +199,7 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 │   └── sessions/              # Auto-extracted session learnings  [PRIVATE]
 ├── Archive/                   # Processed inbox items, retired content
 ├── brain-cli/                 # Node.js Neuron CLI
-│   ├── brain.js               # Main CLI (14 commands)
+│   ├── brain.js               # Main CLI (16 commands)
 │   ├── providers.js           # LLM provider abstraction (Claude/Anthropic/Ollama)
 │   ├── llm-run.js             # Shell bridge for bash scripts → providers
 │   ├── neuron.config.json     # Provider routing, feature flags, research config

@@ -47,24 +47,56 @@ echo ""
 echo "Install location: $KB_DIR"
 echo ""
 
-# Check for claude CLI
-if ! command -v claude &>/dev/null; then
-  error "Claude Code CLI not found. Install it first: https://claude.ai/code"
+# Check for at least one LLM provider
+HAS_PROVIDER=false
+if command -v claude &>/dev/null; then
+  info "Found: Claude Code CLI"
+  HAS_PROVIDER=true
+fi
+if command -v ollama &>/dev/null; then
+  info "Found: Ollama (local models)"
+  HAS_PROVIDER=true
+fi
+if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+  info "Found: Anthropic API key"
+  HAS_PROVIDER=true
+fi
+if [[ "$HAS_PROVIDER" == "false" ]]; then
+  error "No LLM provider found. Install one of:"
+  error "  - Claude Code CLI: https://claude.ai/code"
+  error "  - Ollama (local): brew install ollama"
+  error "  - Set ANTHROPIC_API_KEY for direct API access"
   exit 1
 fi
 
 # Create directory structure
 info "Creating directory structure..."
-mkdir -p "$KB_DIR"/{raw,wiki/{concepts,summaries,queries,sessions,visualizations},memory,scripts,.obsidian/snippets}
+mkdir -p "$KB_DIR"/{Inbox,Archive,Daily,Dashboards,Brain-Index,raw,wiki/{concepts,summaries,queries,sessions},memory,brain-cli,scripts,.obsidian/snippets,templates}
 
 # Copy scripts
 info "Installing scripts..."
-for script in capture.sh compile.sh lint.sh query.sh ingest.sh session-extract.sh session-hook.sh classify-check.sh consolidate.sh; do
+for script in capture.sh compile.sh lint.sh query.sh ingest.sh session-extract.sh session-hook.sh classify-check.sh consolidate.sh auto-commit.sh sync.sh; do
   if [[ -f "$SCRIPTS_SRC/$script" ]]; then
-    # Replace placeholder paths with actual KB_DIR
     sed "s|\$HOME/knowledge-base|$KB_DIR|g" "$SCRIPTS_SRC/$script" > "$KB_DIR/scripts/$script"
     chmod +x "$KB_DIR/scripts/$script"
   fi
+done
+
+# Copy brain-cli
+BRAIN_SRC="$(cd "$(dirname "$0")" && pwd)/brain-cli"
+info "Installing brain CLI..."
+for brainfile in brain.js providers.js llm-run.js semantic.js connections.js metrics.js research.js improve.js neuron.config.json package.json; do
+  if [[ -f "$BRAIN_SRC/$brainfile" ]]; then
+    cp "$BRAIN_SRC/$brainfile" "$KB_DIR/brain-cli/$brainfile"
+  fi
+done
+chmod +x "$KB_DIR/brain-cli/llm-run.js"
+
+# Copy dashboards
+DASH_SRC="$(cd "$(dirname "$0")" && pwd)/Dashboards"
+info "Installing dashboards..."
+for dash in "$DASH_SRC"/*.md; do
+  [[ -f "$dash" ]] && cp "$dash" "$KB_DIR/Dashboards/"
 done
 
 # Create tracking files
@@ -224,13 +256,25 @@ echo ""
 info "Installation complete!"
 echo ""
 echo "Quick start:"
+echo "  cd $KB_DIR/brain-cli"
+echo "  node brain.js braindump                  # Drop a brain dump"
+echo "  node brain.js status                     # Check KB health"
 echo "  $KB_DIR/scripts/capture.sh url https://example.com ai,research"
-echo "  $KB_DIR/scripts/capture.sh thought \"Your idea here\" tag1,tag2"
-echo "  $KB_DIR/scripts/capture.sh compile"
-echo "  $KB_DIR/scripts/capture.sh audit"
+echo "  $KB_DIR/scripts/capture.sh compile       # Compile raw → wiki"
+echo "  node brain.js metrics                    # Check your Brain Score"
 echo ""
-echo "Open in Obsidian: File → Open Vault → $KB_DIR"
+echo "Optional — local models (zero API cost):"
+echo "  brew install ollama && brew services start ollama"
+echo "  ollama pull gemma4:e2b && ollama pull nomic-embed-text"
+echo "  node brain.js config provider openai-compatible"
+echo ""
+echo "Optional — semantic search:"
+echo "  node brain.js reindex"
+echo "  node brain.js smart-search \"your query\""
 echo ""
 echo "Optional — auto-extract session learnings (Claude Code hook):"
 echo "  claude settings set hooks.Stop '[{\"command\": \"$KB_DIR/scripts/session-hook.sh\"}]'"
+echo ""
+echo "Open in Obsidian: File → Open Vault → $KB_DIR"
+echo "Full guide: see QUICKSTART.md"
 echo ""
