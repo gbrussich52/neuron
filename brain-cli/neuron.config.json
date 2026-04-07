@@ -56,8 +56,8 @@
   },
 
   "features": {
-    "semantic_search": false,
-    "connection_finder": false,
+    "semantic_search": true,
+    "connection_finder": true,
     "auto_research": false,
     "metrics": false,
     "auto_improve": false,
@@ -68,7 +68,20 @@
     "tavily_api_key_env": "TAVILY_API_KEY",
     "max_steps": 5,
     "auto_compile": true,
-    "auto_connect": true
+    "auto_connect": true,
+    "include_domains": [],
+    "exclude_domains": [],
+    "preferred_sources": [
+      "github.com",
+      "gist.github.com",
+      "stackoverflow.com",
+      "news.ycombinator.com",
+      "reddit.com",
+      "medium.com",
+      "dev.to",
+      "substack.com",
+      "linkedin.com"
+    ]
   },
 
   "improve": {

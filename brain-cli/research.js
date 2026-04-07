@@ -56,6 +56,10 @@ async function tavilySearch(query, maxResults = 3) {
       include_answer: true,
       search_depth: 'advanced',
       include_raw_content: false,
+      include_domains: config.research?.include_domains?.length > 0
+        ? config.research.include_domains : undefined,
+      exclude_domains: config.research?.exclude_domains?.length > 0
+        ? config.research.exclude_domains : undefined,
     }),
   });
 
@@ -91,6 +95,8 @@ async function planResearch(topic) {
   const config = loadConfig();
   const maxSteps = config.research?.max_steps || 5;
 
+  const preferred = config.research?.preferred_sources?.join(', ') || '';
+
   const plan = await llmCall({
     prompt: `You are a research planner. Decompose this research topic into ${maxSteps} specific search queries.
 
@@ -99,12 +105,14 @@ Topic: ${topic}
 Output EXACTLY ${maxSteps} lines, one search query per line. Each query should be specific and searchable.
 Focus on different angles: facts, statistics, recent developments, expert opinions, counterarguments.
 
+Include queries that target diverse sources: GitHub gists, forum discussions (HackerNews, StackOverflow, Reddit), LinkedIn posts, blog comments, YouTube discussions — not just mainstream articles.${preferred ? `\nPreferred sources: ${preferred}` : ''}
+
 Example output for "PFAS water contamination":
-PFAS contamination levels drinking water 2025 statistics
+PFAS contamination levels drinking water statistics site:reddit.com
 PFAS health effects long-term exposure research studies
-PFAS water filtration removal methods effectiveness comparison
-PFAS EPA regulations new standards 2025
-PFAS class action lawsuits settlements water utilities
+PFAS water filtration removal methods comparison site:youtube.com
+PFAS EPA regulations new standards discussion site:news.ycombinator.com
+PFAS remediation open source tools site:github.com
 
 Output your ${maxSteps} search queries (one per line, no numbering or bullets):`,
     tier: 'classify',

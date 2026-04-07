@@ -78,6 +78,12 @@ function detectContentType(filename, content) {
   const text = content?.slice(0, 500) || '';
 
   if (text.match(/youtube\.com\/watch|youtu\.be\//)) return 'youtube';
+  if (text.match(/gist\.github\.com\//)) return 'url';
+  if (text.match(/github\.com\/.*\/blob\//)) return 'url';
+  if (text.match(/linkedin\.com\/(posts|pulse)\//)) return 'url';
+  if (text.match(/reddit\.com\/r\/.*\/comments\//)) return 'url';
+  if (text.match(/stackoverflow\.com\/questions\//)) return 'url';
+  if (text.match(/news\.ycombinator\.com\/item/)) return 'url';
   if (text.match(/^https?:\/\/\S+$/m) && text.trim().split('\n').length <= 3) return 'url';
   if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) return 'image';
   if (ext === '.pdf') return 'pdf';
