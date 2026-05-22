@@ -2,7 +2,15 @@
 
 Your LLM-powered second brain. Drop anything in — the LLM compiles, cross-links, and maintains a living knowledge wiki. Every question compounds it. Every coding session feeds it. It proactively challenges your assumptions and surfaces what you don't know. It can autonomously research topics, self-improve, and run fully local with no API costs.
 
-Built on the [Karpathy pattern](https://x.com/karpathy/status/2039805659525644595), extended with ideas from [Allie Miller](https://x.com/alliekmiller/status/2040884878229565816), [Nick Spisak](https://x.com/NickSpisak_/status/2041012360668750229), [CyrilXBT](https://x.com/cyrilXBT/status/2040988306154901742), and [Michael Chomsky](https://x.com/michael_chomsky/status/2040946855148929499). Autonomous research loop inspired by [Geoffrey Huntley's Ralph technique](https://ghuntley.com/ralph/).
+Built on the [Karpathy pattern](https://x.com/karpathy/status/2039805659525644595), extended with ideas from [Allie Miller](https://x.com/alliekmiller/status/2040884878229565816), [Nick Spisak](https://x.com/NickSpisak_/status/2041012360668750229), [CyrilXBT](https://x.com/cyrilXBT/status/2040988306154901742), [Michael Chomsky](https://x.com/michael_chomsky/status/2040946855148929499), and [Geoffrey Huntley](https://ghuntley.com/).
+
+## Tool vs. vault
+
+This repository is the **Neuron tool** plus a template vault. Your personal
+knowledge lives in a separate vault directory (e.g. `~/knowledge-base/`). The
+`neuron` command is installed globally and operates on whichever vault you run
+it in. Do not copy `brain-cli/*.js` into your vault — install the tool once,
+globally, from this repo.
 
 ## What It Does
 
@@ -72,7 +80,7 @@ You → Inbox/              Drop anything: URLs, files, YouTube links, brain dum
 - **GitHub Actions CI** — classification audit on every PR
 - **Smart git auto-commit** — `auto-commit.sh` generates LLM-powered commit messages
 - **Cross-device sync** — `sync.sh` with git-crypt encryption for PRIVATE/CONFIDENTIAL files
-- **Ralph Loop integration** — `neuron improve` and `neuron deep-research --ralph` integrate with the [Ralph Loop](https://ghuntley.com/ralph/) for iterative Claude Code sessions
+- **Iterative improvement** — `neuron improve` runs compile → lint → research gaps → recompile, converging to a target Brain Score grade
 
 ## Quick Start
 
@@ -118,7 +126,7 @@ neuron metrics                    # Show Brain Score (A-F grade)
 neuron metrics --history          # Show score trends over time
 neuron research "topic"           # Autonomous web research (single pass)
 neuron deep-research "topic"      # Karpathy auto-research loop (iterative)
-neuron improve --standalone       # Self-improvement loop (compile→lint→research→repeat)
+neuron improve                    # Self-improvement loop (compile→lint→research→repeat)
 
 # Config
 neuron config                     # Show current provider, models, features
@@ -208,7 +216,7 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 │   ├── connections.js         # Cross-linker + gap detector
 │   ├── metrics.js             # Brain Score (A-F grade) + weekly snapshots
 │   ├── research.js            # Autonomous web research + Karpathy deep research
-│   └── improve.js             # Self-improvement loop (Ralph Loop + standalone)
+│   └── improve.js             # Self-improvement loop (compile → lint → research → recompile)
 ├── scripts/                   # Shell automation
 │   ├── capture.sh             # Universal entry point (18 subcommands)
 │   ├── compile.sh             # raw → wiki compilation
@@ -251,9 +259,11 @@ claude settings set hooks.Stop '[{"command": "~/knowledge-base/scripts/session-h
 ## Requirements
 
 **Required (one of):**
-- **Claude Code CLI** (`claude`) — default LLM engine, zero config
-- **Ollama** (`ollama`) — for local-only operation with Gemma 4, Llama, etc.
+- **Claude Code CLI** (`claude`) — default LLM engine, zero config (recommended)
 - **Anthropic API key** — for direct API access without Claude CLI
+
+**Optional — local models:**
+- **Ollama** (`ollama`) — for fully-local, zero-API-cost operation with Gemma 4, Llama, etc. Not required if you use Claude CLI or the Anthropic API.
 
 **Platform:**
 - **macOS** — LaunchAgents for automation
@@ -264,7 +274,6 @@ claude settings set hooks.Stop '[{"command": "~/knowledge-base/scripts/session-h
 - **firecrawl-cli** — better web-to-markdown conversion for URL ingestion
 - **Tavily API key** — enables `neuron research` and `neuron deep-research` web research
 - **git-crypt** — encrypts PRIVATE/CONFIDENTIAL files for safe remote sync
-- **Ralph Loop plugin** — enables iterative Claude Code sessions for `neuron improve` and `neuron deep-research --ralph`
 
 ## Design Principles
 

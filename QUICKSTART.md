@@ -29,6 +29,9 @@ This creates `~/knowledge-base/` with everything you need.
 
 **To set up local models (free, runs on your Mac):**
 
+> **Optional.** Neuron works out of the box with the `claude-cli` provider and
+> needs no local models. Install Ollama only if you want fully-local operation.
+
 ```bash
 brew install ollama
 brew services start ollama
@@ -197,7 +200,7 @@ In Obsidian, open **`Dashboards/Brain-Score.md`** for a visual dashboard.
 
 ```bash
 # Let Neuron improve itself: compile → lint → research gaps → repeat
-neuron improve --standalone --max-iterations 2
+neuron improve --max-iterations 2
 ```
 
 ---
@@ -252,7 +255,7 @@ neuron daily                        Morning briefing
 neuron research "topic"             Web research (single pass)
 neuron deep-research "topic"        Deep research (iterative loop)
 neuron connections <file>           Find related articles
-neuron improve --standalone         Self-improvement loop
+neuron improve                      Self-improvement loop
 ```
 
 ### System
@@ -316,7 +319,7 @@ When you write in `Notes/`, don't worry about this. Neuron adds classification a
 
 **Nothing in `wiki/concepts/`** — Run `capture.sh compile` to compile your raw sources into wiki articles.
 
-**Brain Score is low** — Run `neuron improve --standalone --max-iterations 2` to compile, lint, and research gaps automatically.
+**Brain Score is low** — Run `neuron improve --max-iterations 2` to compile, lint, and research gaps automatically.
 
 ---
 
