@@ -500,11 +500,11 @@ function cmdConfig(args) {
 === Neuron Config ===
 
   Provider:     ${config.provider}
-  Tiers:
-    classify    → ${config.tiers.classify.models[config.provider] || '(not set)'}
-    compile     → ${config.tiers.compile.models[config.provider] || '(not set)'}
-    synthesize  → ${config.tiers.synthesize.models[config.provider] || '(not set)'}
-    embed       → ${config.tiers.embed.models[config.tiers.embed.embed_provider] || '(not set)'} (via ${config.tiers.embed.embed_provider})
+  Models (${config.provider}):
+    classify    → ${config.models[config.provider]?.[config.tiers.classify] || '(not set)'}
+    compile     → ${config.models[config.provider]?.[config.tiers.compile] || '(not set)'}
+    synthesize  → ${config.models[config.provider]?.[config.tiers.synthesize] || '(not set)'}
+    embed       → ${config.embed?.model || '(not set)'} (via ${config.embed?.provider})
 
   Features:
 ${Object.entries(config.features).map(([k, v]) => `    ${k}: ${v ? 'ON' : 'off'}`).join('\n')}
@@ -531,9 +531,9 @@ ${Object.entries(config.features).map(([k, v]) => `    ${k}: ${v ? 'ON' : 'off'}
     writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
     console.log(`Provider switched to: ${newProvider}`);
     // Show what models this maps to
-    console.log(`  classify    → ${config.tiers.classify.models[newProvider] || '(not configured)'}`);
-    console.log(`  compile     → ${config.tiers.compile.models[newProvider] || '(not configured)'}`);
-    console.log(`  synthesize  → ${config.tiers.synthesize.models[newProvider] || '(not configured)'}`);
+    console.log(`  classify    → ${config.models[newProvider]?.[config.tiers.classify] || '(not configured)'}`);
+    console.log(`  compile     → ${config.models[newProvider]?.[config.tiers.compile] || '(not configured)'}`);
+    console.log(`  synthesize  → ${config.models[newProvider]?.[config.tiers.synthesize] || '(not configured)'}`);
     return;
   }
 
@@ -555,22 +555,26 @@ ${Object.entries(config.features).map(([k, v]) => `    ${k}: ${v ? 'ON' : 'off'}
     return;
   }
 
-  if (sub === 'model') {
-    const tier = args[1];
-    const model = args[2];
-    if (!tier || !model) {
-      console.log('Usage: neuron config model <tier> <model-name>');
-      console.log('Tiers: classify, compile, synthesize');
-      console.log('Example: neuron config model compile gemma4:e4b');
+  if (sub === 'models') {
+    const alias = args[1];
+    const id = args[2];
+    if (!alias) {
+      console.log('Model registry:');
+      for (const [prov, aliases] of Object.entries(config.models)) {
+        console.log(`  ${prov}:`);
+        for (const [a, m] of Object.entries(aliases)) console.log(`    ${a} → ${m}`);
+      }
+      console.log('\nUsage: neuron config models <alias> <model-id>   (sets for current provider)');
       return;
     }
-    if (!config.tiers[tier]) {
-      console.error(`Unknown tier: ${tier}`);
+    if (!id) {
+      console.error('Usage: neuron config models <alias> <model-id>');
       return;
     }
-    config.tiers[tier].models[config.provider] = model;
+    if (!config.models[config.provider]) config.models[config.provider] = {};
+    config.models[config.provider][alias] = id;
     writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-    console.log(`${tier} model (${config.provider}): ${model}`);
+    console.log(`models.${config.provider}.${alias} = ${id}`);
     return;
   }
 
@@ -580,13 +584,13 @@ Usage: neuron config <subcommand>
   show                          Show current config
   provider <name>               Switch LLM provider (claude-cli, anthropic-api, openai-compatible)
   feature <name> <on|off>       Toggle a feature flag
-  model <tier> <model-name>     Set model for a tier (classify, compile, synthesize)
+  models <alias> <model-id>     Set a model in the registry (opus, sonnet, haiku)
 
 Examples:
   neuron config provider openai-compatible    # Switch to Ollama/local
   neuron config provider claude-cli           # Switch back to Claude
   neuron config feature semantic_search on    # Enable semantic search
-  neuron config model compile gemma4:e4b      # Use Gemma 4 for compilation
+  neuron config models sonnet gemma4:e4b      # Use Gemma 4 for the sonnet tier
 `);
 }
 
