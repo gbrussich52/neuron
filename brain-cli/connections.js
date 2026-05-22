@@ -14,6 +14,7 @@ import { join, basename, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
+import { timestamp } from './lib/util.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const KB_DIR = process.env.KB_DIR || join(homedir(), 'knowledge-base');
@@ -211,8 +212,7 @@ If no good links exist, write "LINKS: none". Same for questions.`,
 
   // Log questions to wiki/queries/ if any
   if (questions.length > 0 && (auto || !quiet)) {
-    const ts = new Date().toISOString().replace(/[T:]/g, '-').slice(0, 19);
-    const qFile = join(KB_DIR, 'wiki', 'queries', `${ts}_gap_questions.md`);
+    const qFile = join(KB_DIR, 'wiki', 'queries', `${timestamp()}_gap_questions.md`);
     const qContent = [
       '---',
       'classification: PRIVATE',

@@ -31,6 +31,7 @@ import { execSync, execFileSync } from 'child_process';
 import { createInterface } from 'readline';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
+import { timestamp, slugify } from './lib/util.js';
 
 // Provider abstraction — routes LLM calls through configured backend
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -48,7 +49,6 @@ const SCRIPTS = join(KB_DIR, 'scripts');
 const STATE_FILE = join(KB_DIR, 'brain-cli', '.brain-state.json');
 
 // ── Helpers ────────────────────────────────────────────────────
-const timestamp = () => new Date().toISOString().replace(/[T:]/g, '-').slice(0, 19);
 const dateStr = () => new Date().toISOString().slice(0, 10);
 const log = (msg) => console.log(`[neuron] ${msg}`);
 const warn = (msg) => console.log(`[neuron] WARNING: ${msg}`);
@@ -173,8 +173,7 @@ function processYoutube(filepath, content) {
 }
 
 function processText(filepath, content) {
-  const slug = basename(filepath, extname(filepath))
-    .replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60);
+  const slug = slugify(basename(filepath, extname(filepath)));
   const outFile = join(RAW, `${timestamp()}_${slug}.md`);
 
   if (content.startsWith('---')) {
@@ -309,7 +308,7 @@ function cmdBraindump() {
   rl.on('close', () => {
     const content = lines.join('\n').trim();
     if (!content) { log('Empty dump. Nothing saved.'); return; }
-    const slug = content.slice(0, 40).replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    const slug = slugify(content.slice(0, 40), 40);
     const outFile = join(INBOX, `${timestamp()}_braindump_${slug}.md`);
     writeFileSync(outFile, content);
     log(`Brain dump saved: ${basename(outFile)}`);
@@ -653,9 +652,8 @@ const [,, command, ...args] = process.argv;
         if (command && command.length > 5 && !command.startsWith('-')) {
           const fullThought = [command, ...args].join(' ');
           log(`Auto-capturing thought: "${fullThought.slice(0, 60)}..."`);
-          const slug = fullThought.slice(0, 40).replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-          const ts = new Date().toISOString().replace(/[T:]/g, '-').slice(0, 19);
-          const outFile = join(INBOX, `${ts}_thought_${slug}.md`);
+          const slug = slugify(fullThought.slice(0, 40), 40);
+          const outFile = join(INBOX, `${timestamp()}_thought_${slug}.md`);
           writeFileSync(outFile, fullThought);
           log(`Saved to Inbox. Run \`neuron process\` to classify and file.`);
           break;
