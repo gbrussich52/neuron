@@ -19,6 +19,10 @@ describe('parseGaps', () => {
   it('throws on malformed JSON rather than silently returning []', () => {
     expect(() => parseGaps('{not valid json')).toThrow(/lint-report\.json/);
   });
+  it('throws on valid JSON that is not an object', () => {
+    expect(() => parseGaps('null')).toThrow(/lint-report\.json/);
+    expect(() => parseGaps('"hello"')).toThrow(/lint-report\.json/);
+  });
   it('sorts gaps by descending priority', () => {
     const json = JSON.stringify({
       gaps: [

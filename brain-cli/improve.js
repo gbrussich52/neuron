@@ -94,7 +94,7 @@ async function runIteration(iterationNum, opts) {
     });
     console.log('  Lint complete.');
   } catch (e) {
-    console.log(`  Lint: ${e.message?.slice(0, 100)}`);
+    throw new Error(`Lint step failed — aborting iteration: ${e.message?.slice(0, 200)}`);
   }
 
   // Step 3: Check for gaps (from lint report)
@@ -158,6 +158,9 @@ export function parseGaps(jsonText) {
   } catch {
     throw new Error('lint-report.json is malformed — cannot determine gaps');
   }
+  if (!report || typeof report !== 'object' || Array.isArray(report)) {
+    throw new Error('lint-report.json is malformed — expected a JSON object');
+  }
   const gaps = Array.isArray(report.gaps) ? report.gaps : [];
   return gaps
     .slice()
@@ -169,7 +172,9 @@ export function parseGaps(jsonText) {
 /** Read and parse the gap list from the lint-report.json on disk. */
 function readGaps() {
   const reportPath = join(KB_DIR, 'wiki', 'lint-report.json');
-  if (!existsSync(reportPath)) return [];
+  if (!existsSync(reportPath)) {
+    throw new Error('lint produced no lint-report.json — cannot determine gaps');
+  }
   return parseGaps(readFileSync(reportPath, 'utf-8'));
 }
 
