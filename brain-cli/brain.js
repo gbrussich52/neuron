@@ -57,7 +57,7 @@ function loadState() {
   if (existsSync(STATE_FILE)) {
     return JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
   }
-  return { processed: [], lastRun: null, totalProcessed: 0 };
+  return { lastRun: null, totalProcessed: 0 };
 }
 
 function saveState(state) {
@@ -119,17 +119,17 @@ function processYoutube(filepath, content) {
     // Get video title
     let title = 'Unknown Video';
     try {
-      title = execFileSync('yt-dlp', ['--get-title', url], { encoding: 'utf-8', timeout: 15000 }).trim();
+      title = execFileSync('yt-dlp', ['--get-title', url], { encoding: 'utf-8', timeout: loadConfig().timeouts.yt_dlp_title_ms }).trim();
     } catch { /* use default */ }
 
     // Try to get transcript via yt-dlp subtitles
     let transcript = 'No transcript available — video may need manual summarization.';
     try {
-      const tmpBase = join('/tmp', `brain-yt-${slug}`);
+      const tmpBase = join(loadConfig().paths.tmp_dir, `brain-yt-${slug}`);
       execFileSync('yt-dlp', [
         '--write-auto-sub', '--sub-lang', 'en', '--skip-download',
         '-o', tmpBase, url
-      ], { timeout: 30000, stdio: 'pipe' });
+      ], { timeout: loadConfig().timeouts.yt_dlp_sub_ms, stdio: 'pipe' });
 
       const vttFile = `${tmpBase}.en.vtt`;
       if (existsSync(vttFile)) {

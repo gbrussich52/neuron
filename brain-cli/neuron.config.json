@@ -69,5 +69,14 @@
     "max_iterations": 5,
     "target_grade": "B",
     "research_gaps_per_iteration": 2
+  },
+
+  "timeouts": {
+    "yt_dlp_title_ms": 15000,
+    "yt_dlp_sub_ms": 30000
+  },
+
+  "paths": {
+    "tmp_dir": "/tmp"
   }
 }
