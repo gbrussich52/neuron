@@ -10,10 +10,21 @@
     "watch": "node brain.js watch",
     "process": "node brain.js process",
     "search": "node brain.js search",
-    "status": "node brain.js status"
+    "status": "node brain.js status",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "keywords": ["knowledge-base", "second-brain", "neuron", "obsidian", "llm"],
+  "keywords": [
+    "knowledge-base",
+    "second-brain",
+    "neuron",
+    "obsidian",
+    "llm"
+  ],
   "author": "Giani Brussich",
   "license": "MIT",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "vitest": "^4.1.7"
+  }
 }
