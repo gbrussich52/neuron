@@ -110,11 +110,18 @@ export function computeMetrics() {
   // "Related" sections added by connection finder
   const articlesWithRelated = allArticles.filter(a => a.content.includes('## Related')).length;
 
-  // Lint health (check for lint-report.md)
+  // Lint health — prefer the structured JSON report, fall back to .md
   let lintGrade = 'N/A';
-  const lintReport = join(KB_DIR, 'wiki', 'lint-report.md');
-  if (existsSync(lintReport)) {
-    const lintContent = readFileSync(lintReport, 'utf-8');
+  const lintJson = join(KB_DIR, 'wiki', 'lint-report.json');
+  const lintMd = join(KB_DIR, 'wiki', 'lint-report.md');
+  if (existsSync(lintJson)) {
+    try {
+      const parsed = JSON.parse(readFileSync(lintJson, 'utf-8'));
+      if (parsed.grade) lintGrade = String(parsed.grade).toUpperCase();
+    } catch { /* fall through to .md */ }
+  }
+  if (lintGrade === 'N/A' && existsSync(lintMd)) {
+    const lintContent = readFileSync(lintMd, 'utf-8');
     const gradeMatch = lintContent.match(/(?:grade|score|health)[:\s]*([A-F])/i);
     if (gradeMatch) lintGrade = gradeMatch[1].toUpperCase();
   }
@@ -193,6 +200,9 @@ export function getGrade(metrics) {
   // Lint health (0-15)
   const lintScores = { A: 15, B: 12, C: 8, D: 4, F: 0, 'N/A': 7 };
   score += lintScores[metrics.health.lintGrade] || 7;
+
+  // Clamp to [0, 100] and round so no metric combination overflows the scale.
+  score = Math.max(0, Math.min(100, Math.round(score)));
 
   // Convert to letter
   if (score >= 90) return { grade: 'A', score };
