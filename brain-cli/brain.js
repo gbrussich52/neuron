@@ -691,7 +691,7 @@ const [,, command, ...args] = process.argv;
     config                Show current provider, models, features
     config provider <p>   Switch LLM provider (claude-cli, openai-compatible, ...)
     config feature <f> on Toggle feature flags
-    config model <t> <m>  Set model for a tier
+    config models <a> <m> Set a model in the registry (opus/sonnet/haiku)
 
   Drop anything into ~/knowledge-base/Inbox/ — it gets auto-processed.
   URLs, YouTube links, text files, PDFs, images — all handled.
