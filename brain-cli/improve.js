@@ -4,17 +4,11 @@
  * Combines compile → lint → find gaps → research gaps → recompile
  * in an iterative loop until quality targets are met.
  *
- * Two modes:
- *   1. Ralph Loop mode (default) — creates .claude/ralph-loop.local.md
- *      state, leverages the Ralph Loop Stop hook for re-injection
- *   2. Standalone mode (--standalone) — runs the loop internally via
- *      Node.js for cron/CI/LaunchAgent contexts
- *
  * Exports:
  *   runImprove(args)  — Parse args and run the improvement loop
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
@@ -22,7 +16,6 @@ import { execFileSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const KB_DIR = process.env.KB_DIR || join(homedir(), 'knowledge-base');
-const RALPH_STATE = join(process.cwd(), '.claude', 'ralph-loop.local.md');
 const SCRIPTS = join(KB_DIR, 'scripts');
 
 const { loadConfig } = await import(join(__dirname, 'providers.js'));
@@ -32,7 +25,6 @@ const { computeMetrics, getGrade, takeSnapshot } = await import(join(__dirname, 
 
 function parseImproveArgs(args) {
   const opts = {
-    standalone: false,
     maxIterations: null,  // null = use config default
     targetGrade: null,    // null = use config default
     dryRun: false,
@@ -40,9 +32,6 @@ function parseImproveArgs(args) {
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case '--standalone':
-        opts.standalone = true;
-        break;
       case '--max-iterations':
         opts.maxIterations = parseInt(args[++i], 10);
         break;
@@ -186,44 +175,6 @@ function gradeAtOrAbove(current, target) {
   return (GRADE_ORDER[current] || 0) >= (GRADE_ORDER[target] || 0);
 }
 
-// ── Ralph Loop Mode ───────────────────────────────────────────
-
-function setupRalphLoop(opts) {
-  const stateDir = dirname(RALPH_STATE);
-  if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true });
-
-  const prompt = `Run one neuron self-improvement iteration:
-1. Run: bash ${join(SCRIPTS, 'compile.sh')}
-2. Run: bash ${join(SCRIPTS, 'lint.sh')}
-3. Read ${join(KB_DIR, 'wiki', 'lint-report.md')} for gaps
-4. For each gap (max ${opts.maxIterations} per iteration), run: node ${join(__dirname, 'research.js')} "<gap topic>"
-5. Run: node ${join(__dirname, 'metrics.js')} to check Brain Score
-6. If Brain Score >= ${opts.targetGrade}, output: <promise>BRAIN_SCORE_TARGET_MET</promise>
-7. Otherwise, report current grade and what gaps remain.`;
-
-  const state = [
-    '---',
-    'active: true',
-    'iteration: 1',
-    `session_id: ${Date.now()}`,
-    `max_iterations: ${opts.maxIterations}`,
-    `completion_promise: "BRAIN_SCORE_TARGET_MET"`,
-    `started_at: ${new Date().toISOString()}`,
-    '---',
-    '',
-    prompt,
-  ].join('\n');
-
-  writeFileSync(RALPH_STATE, state);
-  console.log(`[neuron] Ralph Loop configured.`);
-  console.log(`  Max iterations: ${opts.maxIterations}`);
-  console.log(`  Target grade: ${opts.targetGrade}`);
-  console.log(`  Completion promise: BRAIN_SCORE_TARGET_MET`);
-  console.log(`  State file: ${RALPH_STATE}`);
-  console.log(`\n  The loop will start when Claude exits this session.`);
-  console.log(`  Cancel with: /cancel-ralph`);
-}
-
 // ── Standalone Mode ───────────────────────────────────────────
 
 async function runStandalone(opts) {
@@ -280,10 +231,5 @@ async function runStandalone(opts) {
 
 export async function runImprove(args) {
   const opts = parseImproveArgs(args);
-
-  if (opts.standalone) {
-    await runStandalone(opts);
-  } else {
-    setupRalphLoop(opts);
-  }
+  await runStandalone(opts);
 }

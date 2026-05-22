@@ -606,7 +606,6 @@ async function cmdDeepResearch(args) {
   const topicParts = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--max-iterations') { flags.maxIterations = parseInt(args[++i], 10); }
-    else if (args[i] === '--ralph') { flags.standalone = false; }
     else { topicParts.push(args[i]); }
   }
   await runDeepResearch(topicParts.join(' '), flags);
@@ -684,9 +683,9 @@ const [,, command, ...args] = process.argv;
     metrics [--history] Show thinking quality score and trends
     research <topic>    Autonomous web research → wiki (single pass)
     deep-research <t>   Karpathy auto-research loop (iterative deep dive)
-                        --max-iterations N  --ralph (use Ralph Loop)
+                        --max-iterations N
     improve [opts]      Self-improvement loop (compile→lint→research→repeat)
-                        --max-iterations N  --standalone  --target-grade A-F
+                        --max-iterations N  --target-grade A-F  --dry-run
 
   Config:
     config                Show current provider, models, features
