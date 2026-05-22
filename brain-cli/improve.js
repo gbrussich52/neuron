@@ -99,7 +99,7 @@ async function runIteration(iterationNum, opts) {
 
   // Step 3: Check for gaps (from lint report)
   console.log('  [3/5] Analyzing gaps...');
-  const gaps = extractGapsFromLintReport();
+  const gaps = readGaps();
 
   if (gaps.length > 0) {
     console.log(`  Found ${gaps.length} gap(s):`);
@@ -145,46 +145,32 @@ async function runIteration(iterationNum, opts) {
 }
 
 /**
- * Extract research gaps from the lint report.
- * Looks for "Suggested new articles" or "gaps" sections.
+ * Parse research gaps from a lint-report.json string.
+ * Deterministic — throws on malformed input rather than silently
+ * returning [] (which would falsely signal "brain complete").
+ * @param {string} jsonText - contents of lint-report.json
+ * @returns {string[]} gap topics, highest priority first
  */
-function extractGapsFromLintReport() {
-  const lintReport = join(KB_DIR, 'wiki', 'lint-report.md');
-  if (!existsSync(lintReport)) return [];
-
-  const content = readFileSync(lintReport, 'utf-8');
-  const gaps = [];
-
-  // Look for suggested topics/articles
-  const suggestedMatch = content.match(/(?:suggest|new article|topic|gap|explore)[^\n]*\n([\s\S]*?)(?=\n##|\n---|\Z)/gi);
-  if (suggestedMatch) {
-    for (const section of suggestedMatch) {
-      const lines = section.split('\n');
-      for (const line of lines) {
-        const cleaned = line.replace(/^[-*]\s*/, '').replace(/\[\[|\]\]/g, '').trim();
-        if (cleaned.length > 10 && cleaned.length < 200 && !cleaned.startsWith('#')) {
-          gaps.push(cleaned);
-        }
-      }
-    }
+export function parseGaps(jsonText) {
+  let report;
+  try {
+    report = JSON.parse(jsonText);
+  } catch {
+    throw new Error('lint-report.json is malformed — cannot determine gaps');
   }
+  const gaps = Array.isArray(report.gaps) ? report.gaps : [];
+  return gaps
+    .slice()
+    .sort((a, b) => (b.priority || 0) - (a.priority || 0))
+    .map(g => g.topic)
+    .filter(Boolean);
+}
 
-  // Also check for "needs human attention" items
-  const attentionMatch = content.match(/needs?\s+(?:human\s+)?attention[^\n]*\n([\s\S]*?)(?=\n##|\n---|\Z)/gi);
-  if (attentionMatch) {
-    for (const section of attentionMatch) {
-      const lines = section.split('\n');
-      for (const line of lines) {
-        const cleaned = line.replace(/^[-*]\s*/, '').trim();
-        if (cleaned.length > 10 && cleaned.length < 200 && !cleaned.startsWith('#')) {
-          gaps.push(cleaned);
-        }
-      }
-    }
-  }
-
-  // Deduplicate
-  return [...new Set(gaps)].slice(0, 10);
+/** Read and parse the gap list from the lint-report.json on disk. */
+function readGaps() {
+  const reportPath = join(KB_DIR, 'wiki', 'lint-report.json');
+  if (!existsSync(reportPath)) return [];
+  return parseGaps(readFileSync(reportPath, 'utf-8'));
 }
 
 // ── Grade Comparison ──────────────────────────────────────────
@@ -251,6 +237,7 @@ async function runStandalone(opts) {
     return;
   }
 
+  const seenGaps = new Set();
   for (let i = 1; i <= opts.maxIterations; i++) {
     const result = await runIteration(i, opts);
 
@@ -263,6 +250,14 @@ async function runStandalone(opts) {
       console.log(`\n=== No more gaps to research. Final: ${result.grade} (${result.score}/100) ===`);
       return;
     }
+
+    // Saturation: if every gap this iteration was already seen, stop.
+    const allSeen = result.gaps.every(g => seenGaps.has(g));
+    if (allSeen) {
+      console.log(`\n=== Saturated — gaps recurred without progress. Final: ${result.grade} (${result.score}/100) ===`);
+      return;
+    }
+    result.gaps.forEach(g => seenGaps.add(g));
 
     if (i < opts.maxIterations) {
       console.log(`\n  Continuing to iteration ${i + 1}...`);
