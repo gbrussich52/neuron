@@ -69,6 +69,30 @@ export function resolveModel(tier, provider) {
   return modelId;
 }
 
+// ── Retry ─────────────────────────────────────────────────────
+
+/**
+ * Run an async fn with exponential backoff.
+ * @param {Function} fn - async function to attempt
+ * @param {{retries?:number, baseDelayMs?:number}} [opts]
+ */
+export async function withRetry(fn, opts = {}) {
+  const retries = opts.retries ?? 3;
+  const baseDelayMs = opts.baseDelayMs ?? 500;
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt === retries) break;
+      const delay = baseDelayMs * 2 ** attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 // ── Provider Implementations ──────────────────────────────────
 
 /**
@@ -109,31 +133,33 @@ async function anthropicApiCall({ prompt, model, maxTokens }) {
     );
   }
 
-  const response = await fetch(`${providerConfig.base_url}/v1/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': providerConfig.api_version,
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens || 4096,
-      messages: [{ role: 'user', content: prompt }],
-    }),
+  return withRetry(async () => {
+    const response = await fetch(`${providerConfig.base_url}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': providerConfig.api_version,
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens || 4096,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Anthropic API error (${response.status}): ${err}`);
+    }
+
+    const data = await response.json();
+    // Extract text from content blocks
+    return data.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('');
   });
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Anthropic API error (${response.status}): ${err}`);
-  }
-
-  const data = await response.json();
-  // Extract text from content blocks
-  return data.content
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
-    .join('');
 }
 
 /**
@@ -145,29 +171,31 @@ async function openaiCompatibleCall({ prompt, model, maxTokens }) {
   const providerConfig = config.providers['openai-compatible'];
   const apiKey = process.env[providerConfig.api_key_env] || 'not-needed';
 
-  const response = await fetch(
-    `${providerConfig.base_url}/chat/completions`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens || 4096,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+  return withRetry(async () => {
+    const response = await fetch(
+      `${providerConfig.base_url}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens || 4096,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`OpenAI-compatible API error (${response.status}): ${err}`);
     }
-  );
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`OpenAI-compatible API error (${response.status}): ${err}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0]?.message?.content || '';
+    const data = await response.json();
+    return data.choices[0]?.message?.content || '';
+  });
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveModel } from '../providers.js';
+import { resolveModel, withRetry } from '../providers.js';
 
 describe('resolveModel', () => {
   it('resolves the synthesize tier to the current Opus for anthropic-api', () => {
@@ -19,5 +19,27 @@ describe('resolveModel', () => {
   });
   it('throws on a provider missing from the registry', () => {
     expect(() => resolveModel('compile', 'nonexistent-provider')).toThrow(/missing from models registry/);
+  });
+});
+
+describe('withRetry', () => {
+  it('returns the result when the call succeeds first try', async () => {
+    const result = await withRetry(async () => 'ok', { retries: 3, baseDelayMs: 1 });
+    expect(result).toBe('ok');
+  });
+  it('retries then succeeds', async () => {
+    let attempts = 0;
+    const result = await withRetry(async () => {
+      attempts++;
+      if (attempts < 3) throw new Error('transient');
+      return 'recovered';
+    }, { retries: 3, baseDelayMs: 1 });
+    expect(result).toBe('recovered');
+    expect(attempts).toBe(3);
+  });
+  it('throws after exhausting retries', async () => {
+    await expect(
+      withRetry(async () => { throw new Error('always fails'); }, { retries: 2, baseDelayMs: 1 })
+    ).rejects.toThrow(/always fails/);
   });
 });
