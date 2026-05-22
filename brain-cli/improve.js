@@ -178,7 +178,7 @@ function gradeAtOrAbove(current, target) {
 // ── Standalone Mode ───────────────────────────────────────────
 
 async function runStandalone(opts) {
-  console.log(`[neuron] Starting standalone improvement loop`);
+  console.log(`[neuron] Starting improvement loop`);
   console.log(`  Max iterations: ${opts.maxIterations}`);
   console.log(`  Target grade: ${opts.targetGrade}`);
   console.log(`  Dry run: ${opts.dryRun}`);

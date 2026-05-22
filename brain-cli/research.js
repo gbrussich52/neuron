@@ -17,7 +17,7 @@
  *   runResearch(topic)  — Full autonomous research pipeline
  */
 
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
@@ -347,12 +347,10 @@ export async function runResearch(topic) {
  * @param {Object} [opts]
  * @param {number} [opts.maxIterations=3] - Max research iterations
  * @param {number} [opts.maxStepsPerIteration=5] - Search steps per iteration
- * @param {boolean} [opts.standalone=true] - Run internally (vs Ralph Loop)
  */
 export async function runDeepResearch(topic, opts = {}) {
   const {
     maxIterations = 3,
-    standalone = true,
   } = opts;
 
   if (!topic) {
@@ -362,11 +360,6 @@ export async function runDeepResearch(topic, opts = {}) {
     console.log('Iteratively researches a topic until thoroughly covered.');
     console.log('Each iteration: search → compile → lint → find gaps → repeat.');
     return;
-  }
-
-  // If not standalone, set up Ralph Loop
-  if (!standalone) {
-    return setupDeepResearchRalph(topic, maxIterations);
   }
 
   console.log(`\n[neuron] Deep Research: "${topic}"`);
@@ -535,46 +528,4 @@ Output only the report content (no frontmatter).`,
 
   writeFileSync(finalFile, finalDoc);
   return finalFile;
-}
-
-/**
- * Set up Ralph Loop for deep research (non-standalone mode).
- */
-function setupDeepResearchRalph(topic, maxIterations) {
-  const stateDir = join(process.cwd(), '.claude');
-  if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true });
-
-  const statePath = join(stateDir, 'ralph-loop.local.md');
-  const prompt = `You are running a deep research loop on: "${topic}"
-
-For this iteration:
-1. Run: node ${join(__dirname, 'research.js')} deep-research-iteration "${topic}"
-   (This searches, compiles new sources, and analyzes gaps)
-2. Read the latest research report in ${WIKI_DIR}/queries/
-3. Read ${WIKI_DIR}/wiki/concepts/ for current coverage of "${topic}"
-4. If the topic is thoroughly covered (no major gaps), output: <promise>DEEP_RESEARCH_COMPLETE</promise>
-5. Otherwise, report what gaps remain and what you'd research next.
-
-The loop will re-run this prompt, and you'll see your previous work in the wiki.`;
-
-  const state = [
-    '---',
-    'active: true',
-    'iteration: 1',
-    `session_id: ${Date.now()}`,
-    `max_iterations: ${maxIterations}`,
-    'completion_promise: "DEEP_RESEARCH_COMPLETE"',
-    `started_at: ${new Date().toISOString()}`,
-    '---',
-    '',
-    prompt,
-  ].join('\n');
-
-  writeFileSync(statePath, state);
-  console.log(`[neuron] Ralph Loop deep research configured.`);
-  console.log(`  Topic: ${topic}`);
-  console.log(`  Max iterations: ${maxIterations}`);
-  console.log(`  Completion promise: DEEP_RESEARCH_COMPLETE`);
-  console.log(`\n  The loop starts when Claude exits this session.`);
-  console.log(`  Cancel with: /cancel-ralph`);
 }
