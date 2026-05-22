@@ -17,7 +17,7 @@
  *   runResearch(topic)  — Full autonomous research pipeline
  */
 
-import { writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
