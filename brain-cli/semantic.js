@@ -191,8 +191,8 @@ export async function buildIndex() {
   console.log('[neuron] Building semantic search index...\n');
 
   const config = loadConfig();
-  if (!config.tiers.embed.models[config.tiers.embed.embed_provider]) {
-    console.error('[neuron] No embedding model configured. Set tiers.embed in neuron.config.json.');
+  if (!config.embed?.model) {
+    console.error('[neuron] No embedding model configured. Set embed.model in neuron.config.json.');
     console.error('  Recommended: Ollama with nomic-embed-text (free, local)');
     console.error('  Install: ollama pull nomic-embed-text');
     process.exit(1);

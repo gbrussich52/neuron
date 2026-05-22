@@ -14,4 +14,10 @@ describe('resolveModel', () => {
   it('throws on an unknown tier', () => {
     expect(() => resolveModel('bogus', 'claude-cli')).toThrow(/Unknown tier/);
   });
+  it('resolves the embed tier to the configured embed model', () => {
+    expect(resolveModel('embed', 'claude-cli')).toBe('nomic-embed-text');
+  });
+  it('throws on a provider missing from the registry', () => {
+    expect(() => resolveModel('compile', 'nonexistent-provider')).toThrow(/missing from models registry/);
+  });
 });

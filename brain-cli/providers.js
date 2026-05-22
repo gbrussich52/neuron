@@ -62,7 +62,11 @@ export function resolveModel(tier, provider) {
   if (!providerModels) {
     throw new Error(`Provider "${provider}" missing from models registry`);
   }
-  return providerModels[alias] || null;
+  const modelId = providerModels[alias];
+  if (!modelId) {
+    throw new Error(`Alias "${alias}" not mapped for provider "${provider}" in models registry`);
+  }
+  return modelId;
 }
 
 // ── Provider Implementations ──────────────────────────────────
