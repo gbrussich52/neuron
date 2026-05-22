@@ -191,8 +191,8 @@ If no good links exist, write "LINKS: none". Same for questions.`,
         appliedLinks.push(...links.map(l => l.target));
         if (!quiet) console.log(`\n  Auto-applied ${links.length} link(s) to Related section.`);
       }
-    } else if (!quiet) {
-      // Interactive mode
+    } else if (!quiet && process.stdin.isTTY) {
+      // Interactive mode — only when attached to a real terminal.
       console.log('');
       const answer = await askUser('  Apply these links? (y/n/q) ');
       if (answer === 'y' || answer === 'yes') {
@@ -207,6 +207,9 @@ If no good links exist, write "LINKS: none". Same for questions.`,
           console.log('  File already has a Related section. Skipping.');
         }
       }
+    } else if (!quiet) {
+      // Non-interactive (piped / cron / loop) without --auto: show, do not block.
+      console.log('\n  (non-interactive — re-run with --auto to apply these links)');
     }
   }
 
