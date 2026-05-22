@@ -17,42 +17,23 @@
     }
   },
 
+  "models": {
+    "claude-cli":        { "opus": "opus", "sonnet": "sonnet", "haiku": "haiku" },
+    "anthropic-api":     { "opus": "claude-opus-4-7", "sonnet": "claude-sonnet-4-6", "haiku": "claude-haiku-4-5-20251001" },
+    "openai-compatible": { "opus": "gemma4:e4b", "sonnet": "gemma4:e4b", "haiku": "gemma4:e2b" }
+  },
+
   "tiers": {
-    "classify": {
-      "description": "Cheapest model — classification, tagging, simple extraction",
-      "models": {
-        "claude-cli": "haiku",
-        "anthropic-api": "claude-haiku-4-5-20251001",
-        "openai-compatible": "gemma4:e2b"
-      }
-    },
-    "compile": {
-      "description": "Mid-tier — wiki compilation, summaries, connection finding",
-      "models": {
-        "claude-cli": "sonnet",
-        "anthropic-api": "claude-sonnet-4-6",
-        "openai-compatible": "gemma4:e4b"
-      }
-    },
-    "synthesize": {
-      "description": "Best model — deep analysis, research synthesis, insights",
-      "models": {
-        "claude-cli": "opus",
-        "anthropic-api": "claude-opus-4-6",
-        "openai-compatible": "gemma4:e4b"
-      }
-    },
-    "embed": {
-      "description": "Embedding model — vector search indexing",
-      "models": {
-        "claude-cli": null,
-        "anthropic-api": null,
-        "openai-compatible": "nomic-embed-text"
-      },
-      "embed_provider": "openai-compatible",
-      "embed_base_url": "http://localhost:11434/v1",
-      "embed_dimensions": 768
-    }
+    "classify":   "haiku",
+    "compile":    "sonnet",
+    "synthesize": "opus"
+  },
+
+  "embed": {
+    "provider": "openai-compatible",
+    "base_url": "http://localhost:11434/v1",
+    "model": "nomic-embed-text",
+    "dimensions": 768
   },
 
   "features": {

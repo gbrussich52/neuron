@@ -40,17 +40,29 @@ export function reloadConfig() {
 // ── Model Resolution ──────────────────────────────────────────
 
 /**
- * Resolve the model name for a given tier and provider.
+ * Resolve the concrete model name for a tier + provider.
+ * Tiers map to an alias (opus|sonnet|haiku); the `models` registry maps
+ * each alias to a provider-specific ID. `embed` is resolved separately.
  * @param {string} tier - classify | compile | synthesize | embed
- * @param {string} [provider] - Override provider (defaults to config.provider)
- * @returns {string|null} Model name or null if not configured
+ * @param {string} [provider] - defaults to config.provider
+ * @returns {string|null}
  */
 export function resolveModel(tier, provider) {
   const config = loadConfig();
   provider = provider || config.provider;
-  const tierConfig = config.tiers[tier];
-  if (!tierConfig) throw new Error(`Unknown tier: ${tier}`);
-  return tierConfig.models[provider] || null;
+
+  if (tier === 'embed') {
+    return config.embed?.model || null;
+  }
+
+  const alias = config.tiers[tier];
+  if (!alias) throw new Error(`Unknown tier: ${tier}`);
+
+  const providerModels = config.models?.[provider];
+  if (!providerModels) {
+    throw new Error(`Provider "${provider}" missing from models registry`);
+  }
+  return providerModels[alias] || null;
 }
 
 // ── Provider Implementations ──────────────────────────────────
@@ -160,12 +172,12 @@ async function openaiCompatibleCall({ prompt, model, maxTokens }) {
  */
 async function embedCall({ input, model }) {
   const config = loadConfig();
-  const embedConfig = config.tiers.embed;
-  const baseUrl = embedConfig.embed_base_url ||
-    config.providers[embedConfig.embed_provider]?.base_url;
+  const embedConfig = config.embed;
+  const baseUrl = embedConfig?.base_url ||
+    config.providers[embedConfig?.provider]?.base_url;
 
   if (!baseUrl) {
-    throw new Error('No embed provider configured. Set tiers.embed.embed_base_url in neuron.config.json');
+    throw new Error('No embed provider configured. Set embed.base_url in neuron.config.json');
   }
 
   const apiKey = process.env.OPENAI_API_KEY || 'not-needed';
@@ -180,7 +192,7 @@ async function embedCall({ input, model }) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: model || embedConfig.models[embedConfig.embed_provider],
+      model: model || embedConfig.model,
       input: inputs,
     }),
   });
