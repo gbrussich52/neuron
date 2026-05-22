@@ -118,7 +118,7 @@ export function computeMetrics() {
     try {
       const parsed = JSON.parse(readFileSync(lintJson, 'utf-8'));
       if (parsed.grade) lintGrade = String(parsed.grade).toUpperCase();
-    } catch { /* fall through to .md */ }
+    } catch { /* metrics is a display path — degrade to the .md grade rather than throw */ }
   }
   if (lintGrade === 'N/A' && existsSync(lintMd)) {
     const lintContent = readFileSync(lintMd, 'utf-8');
@@ -201,7 +201,8 @@ export function getGrade(metrics) {
   const lintScores = { A: 15, B: 12, C: 8, D: 4, F: 0, 'N/A': 7 };
   score += lintScores[metrics.health.lintGrade] || 7;
 
-  // Clamp to [0, 100] and round so no metric combination overflows the scale.
+  // Round off linkDensity float drift. The [0,100] clamp is a defensive guard
+  // for future scoring-weight changes — today's component caps already bound the sum.
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   // Convert to letter
