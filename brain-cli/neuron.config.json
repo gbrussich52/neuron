@@ -39,10 +39,10 @@
   "features": {
     "semantic_search": true,
     "connection_finder": true,
-    "auto_research": false,
-    "metrics": false,
-    "auto_improve": false,
-    "auto_commit": false
+    "auto_research": true,
+    "metrics": true,
+    "auto_improve": true,
+    "auto_commit": true
   },
 
   "research": {
