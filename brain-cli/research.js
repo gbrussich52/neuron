@@ -245,7 +245,12 @@ Output only the report content (no frontmatter).`,
     : join(WIKI_DIR, 'queries');
   mkdirSync(outDir, { recursive: true });
 
-  const outFile = join(outDir, `${ts}-research-${topicSlug}.md`);
+  // Filename: review-routed drafts use the hyphenated pattern per the autonomy plan;
+  // the default path preserves the original `${ts}_research_${slug}.md` convention so
+  // downstream tooling and existing wiki history stay consistent.
+  const outFile = routeToReview
+    ? join(outDir, `${ts}-${topicSlug}.md`)
+    : join(outDir, `${ts}_research_${topicSlug}.md`);
 
   // Build frontmatter — review-routed drafts get extra keys so the human
   // approver knows where the article should land and what triggered it.
