@@ -17,11 +17,12 @@
  *   runResearch(topic)  — Full autonomous research pipeline
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { execFileSync } from 'child_process';
+import { timestamp, slugify } from './lib/util.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const KB_DIR = process.env.KB_DIR || join(homedir(), 'knowledge-base');
@@ -189,10 +190,19 @@ async function executeSearches(queries, topic) {
 
 /**
  * Generate a synthesis report from all search results.
+ *
+ * @param {string} topic
+ * @param {Object[]} allResults
+ * @param {string[]} sourceFiles
+ * @param {Object} [opts]
+ * @param {boolean} [opts.routeToReview=false] - When true, write to wiki/_review/ with
+ *   review-queue frontmatter instead of wiki/queries/. Used by the improvement loop so
+ *   autonomously researched articles await human approval before entering the main wiki.
  */
-async function synthesizeReport(topic, allResults, sourceFiles) {
-  const timestamp = new Date().toISOString().replace(/[T:]/g, '-').slice(0, 19);
-  const topicSlug = topic.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 60);
+async function synthesizeReport(topic, allResults, sourceFiles, opts = {}) {
+  const { routeToReview = false } = opts;
+  const ts = timestamp();
+  const topicSlug = slugify(topic, 60);
 
   // Compile source summaries for the LLM
   const sourceSummary = allResults
@@ -229,18 +239,45 @@ Output only the report content (no frontmatter).`,
     maxTokens: 4000,
   });
 
-  // Write the report
-  const reportFile = join(WIKI_DIR, 'queries', `${timestamp}_research_${topicSlug}.md`);
+  // Determine output directory — review queue vs. regular wiki/queries/
+  const outDir = routeToReview
+    ? join(KB_DIR, 'wiki', '_review')
+    : join(WIKI_DIR, 'queries');
+  mkdirSync(outDir, { recursive: true });
+
+  const outFile = join(outDir, `${ts}-research-${topicSlug}.md`);
+
+  // Build frontmatter — review-routed drafts get extra keys so the human
+  // approver knows where the article should land and what triggered it.
+  const frontmatter = routeToReview
+    ? [
+        '---',
+        'classification: PRIVATE',
+        'type: research-draft',
+        'status: pending-review',
+        'source: neuron-research',
+        `topic: "${topic}"`,
+        `created: ${new Date().toISOString()}`,
+        `target_path: wiki/concepts/${topicSlug}.md`,
+        `sources_count: ${allResults.reduce((sum, r) => sum + r.results.length, 0)}`,
+        `search_steps: ${allResults.length}`,
+        `tags: [research, auto-generated, pending-review, ${topicSlug}]`,
+        '---',
+      ]
+    : [
+        '---',
+        'classification: PRIVATE',
+        'type: research-report',
+        `topic: "${topic}"`,
+        `generated: ${new Date().toISOString()}`,
+        `sources_count: ${allResults.reduce((sum, r) => sum + r.results.length, 0)}`,
+        `search_steps: ${allResults.length}`,
+        `tags: [research, auto-generated, ${topicSlug}]`,
+        '---',
+      ];
+
   const reportContent = [
-    '---',
-    'classification: PRIVATE',
-    'type: research-report',
-    `topic: "${topic}"`,
-    `generated: ${new Date().toISOString()}`,
-    `sources_count: ${allResults.reduce((sum, r) => sum + r.results.length, 0)}`,
-    `search_steps: ${allResults.length}`,
-    `tags: [research, auto-generated, ${topicSlug}]`,
-    '---',
+    ...frontmatter,
     '',
     `# Research Report: ${topic}`,
     '',
@@ -251,16 +288,23 @@ Output only the report content (no frontmatter).`,
     '',
   ].join('\n');
 
-  writeFileSync(reportFile, reportContent);
-  return reportFile;
+  writeFileSync(outFile, reportContent);
+  return outFile;
 }
 
 // ── Public API ────────────────────────────────────────────────
 
 /**
  * Run the full autonomous research pipeline.
+ *
+ * @param {string} topic - Research topic.
+ * @param {Object} [opts]
+ * @param {boolean} [opts.routeToReview=false] - When true, the synthesis report is written
+ *   to wiki/_review/ (human approval queue) instead of wiki/queries/. Pass this from the
+ *   improvement loop; do NOT pass it from cmdResearch (human-invoked path).
  */
-export async function runResearch(topic) {
+export async function runResearch(topic, opts = {}) {
+  const { routeToReview = false } = opts;
   if (!topic) {
     console.log('Usage: neuron research <topic>');
     console.log('Example: neuron research "PFAS water filtration regulations"');
@@ -288,7 +332,7 @@ export async function runResearch(topic) {
 
   // Step 3: Generate synthesis report
   console.log('  Synthesizing report...');
-  const reportFile = await synthesizeReport(topic, allResults, sourceFiles);
+  const reportFile = await synthesizeReport(topic, allResults, sourceFiles, { routeToReview });
   console.log(`  Report: ${basename(reportFile)}\n`);
 
   // Step 4: Auto-compile (if enabled)
