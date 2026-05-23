@@ -616,6 +616,11 @@ async function cmdImprove(args) {
   await runImprove(args);
 }
 
+async function cmdReview(args) {
+  const { runReview } = await import(join(__dirname, 'review.js'));
+  await runReview(args);
+}
+
 // ── CLI Router ─────────────────────────────────────────────────
 const [,, command, ...args] = process.argv;
 
@@ -635,6 +640,7 @@ const [,, command, ...args] = process.argv;
       case 'research': await cmdResearch(args.join(' ')); break;
       case 'deep-research': await cmdDeepResearch(args); break;
       case 'improve': await cmdImprove(args); break;
+      case 'review': await cmdReview(args); break;
       case 'config': cmdConfig(args); break;
       case 'status': cmdStatus(); break;
       case 'daily': await cmdDaily(); break;
@@ -686,6 +692,8 @@ const [,, command, ...args] = process.argv;
                         --max-iterations N
     improve [opts]      Self-improvement loop (compile→lint→research→repeat)
                         --max-iterations N  --target-grade A-F  --dry-run
+    review [list|next|  Review queue: approve/reject autonomous research
+      approve|reject <n>]
 
   Config:
     config                Show current provider, models, features
