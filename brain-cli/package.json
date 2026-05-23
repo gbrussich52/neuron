@@ -4,7 +4,8 @@
   "description": "Neuron — LLM-powered second brain CLI. Watches Inbox, auto-processes knowledge, surfaces insights.",
   "main": "brain.js",
   "bin": {
-    "neuron": "./brain.js"
+    "neuron": "./brain.js",
+    "llm-run": "./llm-run.js"
   },
   "scripts": {
     "watch": "node brain.js watch",
