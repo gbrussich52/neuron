@@ -397,14 +397,20 @@ export async function runResearch(topic, opts = {}) {
     return;
   }
 
-  // Loop-invoked path: use claude's web tools, route to review queue.
-  // Works without TAVILY_API_KEY — claude does the search itself.
-  if (routeToReview) {
-    return runWebResearch(topic);
+  // Default path: use claude's built-in WebSearch/WebFetch/Write tools.
+  // Works without TAVILY_API_KEY. Routes to wiki/_review/ when invoked from the
+  // improvement loop, or to wiki/concepts/ when invoked directly by a human.
+  if (routeToReview || !process.env.TAVILY_API_KEY) {
+    const result = await runWebResearch(topic);
+    if (!routeToReview) {
+      console.log(`  Article drafted: ${result.reportFile}`);
+      console.log(`  Edit/move with: neuron review approve 1   (after \`neuron review\`)`);
+    }
+    return result;
   }
 
-  // Direct-invoke path (`neuron research <topic>`): full Tavily orchestration.
-  console.log(`[neuron] Starting autonomous research: "${topic}"\n`);
+  // Opt-in Tavily orchestration: only when TAVILY_API_KEY is set AND not routing to review.
+  console.log(`[neuron] Starting Tavily-based research: "${topic}"\n`);
   const startTime = Date.now();
 
   // Step 1: Plan research
