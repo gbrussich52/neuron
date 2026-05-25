@@ -308,6 +308,87 @@ Output only the report content (no frontmatter).`,
  *   to wiki/_review/ (human approval queue) instead of wiki/queries/. Pass this from the
  *   improvement loop; do NOT pass it from cmdResearch (human-invoked path).
  */
+// ── Web Research (claude-native, no Tavily required) ──────────
+
+/**
+ * Research a topic using claude's built-in WebSearch/WebFetch + Write tools.
+ * Used by the improvement loop (when opts.routeToReview is true) so research
+ * works without a TAVILY_API_KEY. Drafted article lands in wiki/_review/ for
+ * human approval. Same execute-mode pattern as lint.sh/compile.sh:
+ * --permission-mode acceptEdits is required or claude silently no-ops Write.
+ */
+async function runWebResearch(topic) {
+  const slug = slugify(topic, 60);
+  const reviewDir = join(WIKI_DIR, '_review');
+  mkdirSync(reviewDir, { recursive: true });
+  const outFile = join(reviewDir, `${timestamp()}-${slug}.md`);
+  const isoNow = new Date().toISOString();
+  const targetPath = `wiki/concepts/${slug}.md`;
+
+  const prompt = `Research this topic using your web tools and write a draft article.
+
+Topic: ${topic}
+
+Steps (execute silently):
+1. Use WebSearch to find 3-5 authoritative sources on the topic.
+2. Use WebFetch on the 2-3 most promising results to read full content.
+3. Synthesize a 500-1000 word draft article that consolidates the findings.
+4. Use the Write tool to save the article to: ${outFile}
+
+The file MUST begin with EXACTLY this frontmatter, then a blank line, then the article:
+
+---
+classification: PRIVATE
+status: pending-review
+type: research-draft
+source: neuron-research
+created: ${isoNow}
+target_path: ${targetPath}
+topic: "${topic.replace(/"/g, '\\"')}"
+---
+
+# ${topic}
+
+(article body with [[wikilinks]] for cross-references where natural)
+
+## Sources
+
+- <Title> — <URL>
+- ...
+
+Rules:
+- Do NOT print the article to stdout. Use the Write tool only.
+- Cite specific facts. Include real URLs in the Sources list.
+- If you cannot find authoritative sources, write a brief stub explaining what is missing and exit. ALWAYS produce the file.
+- Exit immediately after writing.`;
+
+  console.log(`[neuron] Web-researching: "${topic}"`);
+  try {
+    execFileSync('claude', [
+      '--print',
+      '--permission-mode', 'acceptEdits',
+      '--allowed-tools', 'WebSearch,WebFetch,Read,Write',
+      '--model', 'sonnet',
+      prompt,
+    ], {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: 1200000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  } catch (err) {
+    throw new Error(`Web research failed for "${topic}": ${err.message?.slice(0, 200)}`);
+  }
+
+  if (!existsSync(outFile)) {
+    throw new Error(`Web research did not produce expected file: ${outFile}`);
+  }
+  console.log(`  → ${basename(outFile)}`);
+  return { reportFile: outFile };
+}
+
+// ── Public Entry Points ───────────────────────────────────────
+
 export async function runResearch(topic, opts = {}) {
   const { routeToReview = false } = opts;
   if (!topic) {
@@ -316,6 +397,13 @@ export async function runResearch(topic, opts = {}) {
     return;
   }
 
+  // Loop-invoked path: use claude's web tools, route to review queue.
+  // Works without TAVILY_API_KEY — claude does the search itself.
+  if (routeToReview) {
+    return runWebResearch(topic);
+  }
+
+  // Direct-invoke path (`neuron research <topic>`): full Tavily orchestration.
   console.log(`[neuron] Starting autonomous research: "${topic}"\n`);
   const startTime = Date.now();
 
