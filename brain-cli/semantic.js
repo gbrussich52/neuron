@@ -9,12 +9,15 @@
  *   buildIndex()           — Full rebuild of the embedding index
  *   incrementalUpdate()    — Only re-embed files with newer mtime
  *   search(query, topK)    — Semantic search, returns ranked results
+ *   readNoteMeta(content)  — Read classification/trust/author/source frontmatter
+ *   chunksForFile(...)     — Classification-aware chunks ([] for CONFIDENTIAL)
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { join, basename, relative, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
+import { parseFrontmatter } from './lib/frontmatter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const KB_DIR = process.env.KB_DIR || join(homedir(), 'knowledge-base');
@@ -92,6 +95,48 @@ function chunkByHeading(content, filePath) {
   return chunks;
 }
 
+/**
+ * Read the trust-relevant metadata from a note's frontmatter.
+ */
+export function readNoteMeta(content) {
+  const { data } = parseFrontmatter(content);
+  return {
+    classification: data.classification || null,
+    trust: data.trust || null,
+    author: data.author || null,
+    source: data.source || null,
+  };
+}
+
+/**
+ * Build the indexable chunks for one file, classification-aware.
+ * CONFIDENTIAL files are NEVER indexed (returns []). Every chunk is tagged
+ * with classification (default PRIVATE) and trust (default unverified — fail-closed).
+ */
+export function chunksForFile(content, relativePath) {
+  const meta = readNoteMeta(content);
+  if (meta.classification === 'CONFIDENTIAL') return [];
+  const classification = meta.classification || 'PRIVATE';
+  const trust = meta.trust || 'unverified';
+  return chunkByHeading(content, relativePath).map(c => ({ ...c, classification, trust }));
+}
+
+/**
+ * Fail-closed read filter. Returns only trust:verified chunks and NEVER
+ * classification:CONFIDENTIAL. A chunk lacking trust is excluded.
+ * @param {Array} chunks
+ * @param {{includeUnverified?: boolean}} [opts]
+ */
+export function filterTrusted(chunks, { includeUnverified = false } = {}) {
+  return chunks.filter(c => {
+    if (c.classification === 'CONFIDENTIAL') return false;
+    // Legacy chunks (no trust field) are always excluded — fail-closed.
+    if (!c.trust) return false;
+    if (includeUnverified) return true;
+    return c.trust === 'verified';
+  });
+}
+
 // ── File Discovery ────────────────────────────────────────────
 
 /**
@@ -127,8 +172,27 @@ function findMarkdownFiles() {
 // ── Index Storage ─────────────────────────────────────────────
 
 function loadIndex() {
+  // NOTE: chunks indexed before classification-aware indexing (Task 2) lack
+  // `classification`/`trust`. The read filter (Task 3) is fail-closed on missing
+  // trust, and `neuron reindex` rebuilds the index to backfill these fields.
   if (!existsSync(EMBEDDINGS_FILE)) return { chunks: [], version: 1 };
   return JSON.parse(readFileSync(EMBEDDINGS_FILE, 'utf-8'));
+}
+
+/**
+ * Shape a chunk + its embedding into the persisted index record.
+ * Single source of truth for the stored-chunk schema — keep buildIndex and
+ * incrementalUpdate in sync by routing both through here.
+ */
+function toStoredChunk(chunk, embedding) {
+  return {
+    heading: chunk.heading,
+    text: chunk.text.slice(0, 500),
+    file: chunk.file,
+    classification: chunk.classification,
+    trust: chunk.trust,
+    embedding,
+  };
 }
 
 function saveIndex(index) {
@@ -205,8 +269,7 @@ export async function buildIndex() {
   const allChunks = [];
   for (const file of files) {
     const content = readFileSync(file.path, 'utf-8');
-    const chunks = chunkByHeading(content, file.relativePath);
-    allChunks.push(...chunks);
+    allChunks.push(...chunksForFile(content, file.relativePath));
   }
   console.log(`  Created ${allChunks.length} chunks`);
 
@@ -226,12 +289,7 @@ export async function buildIndex() {
     version: 1,
     builtAt: new Date().toISOString(),
     chunkCount: allChunks.length,
-    chunks: allChunks.map((chunk, i) => ({
-      heading: chunk.heading,
-      text: chunk.text.slice(0, 500), // Store truncated text for display
-      file: chunk.file,
-      embedding: embeddings[i],
-    })),
+    chunks: allChunks.map((chunk, i) => toStoredChunk(chunk, embeddings[i])),
   };
 
   saveIndex(index);
@@ -277,8 +335,7 @@ export async function incrementalUpdate() {
   const newChunks = [];
   for (const file of changed) {
     const content = readFileSync(file.path, 'utf-8');
-    const chunks = chunkByHeading(content, file.relativePath);
-    newChunks.push(...chunks);
+    newChunks.push(...chunksForFile(content, file.relativePath));
   }
 
   if (newChunks.length > 0) {
@@ -286,12 +343,7 @@ export async function incrementalUpdate() {
     const embeddings = await batchEmbed(texts);
 
     for (let i = 0; i < newChunks.length; i++) {
-      index.chunks.push({
-        heading: newChunks[i].heading,
-        text: newChunks[i].text.slice(0, 500),
-        file: newChunks[i].file,
-        embedding: embeddings[i],
-      });
+      index.chunks.push(toStoredChunk(newChunks[i], embeddings[i]));
     }
   }
 
@@ -332,8 +384,8 @@ export async function search(query, topK = 5) {
   // Embed the query
   const [queryEmbedding] = await embed(query);
 
-  // Score all chunks
-  const scored = index.chunks.map(chunk => ({
+  // Score all chunks (fail-closed: verified only, never CONFIDENTIAL)
+  const scored = filterTrusted(index.chunks).map(chunk => ({
     score: cosineSimilarity(queryEmbedding, chunk.embedding),
     heading: chunk.heading,
     text: chunk.text,
@@ -366,7 +418,8 @@ export async function searchQuiet(query, topK = 5) {
 
   const [queryEmbedding] = await embed(query);
 
-  const scored = index.chunks.map(chunk => ({
+  // Fail-closed: verified only, never CONFIDENTIAL
+  const scored = filterTrusted(index.chunks).map(chunk => ({
     score: cosineSimilarity(queryEmbedding, chunk.embedding),
     heading: chunk.heading,
     text: chunk.text,
@@ -405,7 +458,8 @@ export async function smartSearch(query, topK = 8) {
   if (index.chunks.length > 0) {
     try {
       const [queryEmbedding] = await embed(query);
-      const semanticResults = index.chunks
+      // Fail-closed: verified only, never CONFIDENTIAL
+      const semanticResults = filterTrusted(index.chunks)
         .map(chunk => ({
           score: cosineSimilarity(queryEmbedding, chunk.embedding),
           heading: chunk.heading,
