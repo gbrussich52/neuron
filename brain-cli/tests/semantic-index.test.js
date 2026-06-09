@@ -26,4 +26,10 @@ describe('chunksForFile', () => {
     const md = `---\nclassification: PRIVATE\n---\n\n# T\nbody text that is definitely longer than fifty characters for chunking.`;
     expect(chunksForFile(md, 'raw/x.md')[0].trust).toBe('unverified');
   });
+  it('defaults classification to PRIVATE when no frontmatter (fail-closed)', () => {
+    const md = `# No frontmatter\nBody text that exceeds the fifty character minimum threshold.`;
+    const chunks = chunksForFile(md, 'raw/unclassified.md');
+    expect(chunks[0].classification).toBe('PRIVATE');
+    expect(chunks[0].trust).toBe('unverified');
+  });
 });

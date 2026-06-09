@@ -9,6 +9,8 @@
  *   buildIndex()           — Full rebuild of the embedding index
  *   incrementalUpdate()    — Only re-embed files with newer mtime
  *   search(query, topK)    — Semantic search, returns ranked results
+ *   readNoteMeta(content)  — Read classification/trust/author/source frontmatter
+ *   chunksForFile(...)     — Classification-aware chunks ([] for CONFIDENTIAL)
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
@@ -154,8 +156,27 @@ function findMarkdownFiles() {
 // ── Index Storage ─────────────────────────────────────────────
 
 function loadIndex() {
+  // NOTE: chunks indexed before classification-aware indexing (Task 2) lack
+  // `classification`/`trust`. The read filter (Task 3) is fail-closed on missing
+  // trust, and `neuron reindex` rebuilds the index to backfill these fields.
   if (!existsSync(EMBEDDINGS_FILE)) return { chunks: [], version: 1 };
   return JSON.parse(readFileSync(EMBEDDINGS_FILE, 'utf-8'));
+}
+
+/**
+ * Shape a chunk + its embedding into the persisted index record.
+ * Single source of truth for the stored-chunk schema — keep buildIndex and
+ * incrementalUpdate in sync by routing both through here.
+ */
+function toStoredChunk(chunk, embedding) {
+  return {
+    heading: chunk.heading,
+    text: chunk.text.slice(0, 500),
+    file: chunk.file,
+    classification: chunk.classification,
+    trust: chunk.trust,
+    embedding,
+  };
 }
 
 function saveIndex(index) {
@@ -252,14 +273,7 @@ export async function buildIndex() {
     version: 1,
     builtAt: new Date().toISOString(),
     chunkCount: allChunks.length,
-    chunks: allChunks.map((chunk, i) => ({
-      heading: chunk.heading,
-      text: chunk.text.slice(0, 500), // Store truncated text for display
-      file: chunk.file,
-      classification: chunk.classification,
-      trust: chunk.trust,
-      embedding: embeddings[i],
-    })),
+    chunks: allChunks.map((chunk, i) => toStoredChunk(chunk, embeddings[i])),
   };
 
   saveIndex(index);
@@ -313,14 +327,7 @@ export async function incrementalUpdate() {
     const embeddings = await batchEmbed(texts);
 
     for (let i = 0; i < newChunks.length; i++) {
-      index.chunks.push({
-        heading: newChunks[i].heading,
-        text: newChunks[i].text.slice(0, 500),
-        file: newChunks[i].file,
-        classification: newChunks[i].classification,
-        trust: newChunks[i].trust,
-        embedding: embeddings[i],
-      });
+      index.chunks.push(toStoredChunk(newChunks[i], embeddings[i]));
     }
   }
 
