@@ -121,6 +121,22 @@ export function chunksForFile(content, relativePath) {
   return chunkByHeading(content, relativePath).map(c => ({ ...c, classification, trust }));
 }
 
+/**
+ * Fail-closed read filter. Returns only trust:verified chunks and NEVER
+ * classification:CONFIDENTIAL. A chunk lacking trust is excluded.
+ * @param {Array} chunks
+ * @param {{includeUnverified?: boolean}} [opts]
+ */
+export function filterTrusted(chunks, { includeUnverified = false } = {}) {
+  return chunks.filter(c => {
+    if (c.classification === 'CONFIDENTIAL') return false;
+    // Legacy chunks (no trust field) are always excluded — fail-closed.
+    if (!c.trust) return false;
+    if (includeUnverified) return true;
+    return c.trust === 'verified';
+  });
+}
+
 // ── File Discovery ────────────────────────────────────────────
 
 /**
@@ -368,8 +384,8 @@ export async function search(query, topK = 5) {
   // Embed the query
   const [queryEmbedding] = await embed(query);
 
-  // Score all chunks
-  const scored = index.chunks.map(chunk => ({
+  // Score all chunks (fail-closed: verified only, never CONFIDENTIAL)
+  const scored = filterTrusted(index.chunks).map(chunk => ({
     score: cosineSimilarity(queryEmbedding, chunk.embedding),
     heading: chunk.heading,
     text: chunk.text,
@@ -402,7 +418,8 @@ export async function searchQuiet(query, topK = 5) {
 
   const [queryEmbedding] = await embed(query);
 
-  const scored = index.chunks.map(chunk => ({
+  // Fail-closed: verified only, never CONFIDENTIAL
+  const scored = filterTrusted(index.chunks).map(chunk => ({
     score: cosineSimilarity(queryEmbedding, chunk.embedding),
     heading: chunk.heading,
     text: chunk.text,
@@ -441,7 +458,8 @@ export async function smartSearch(query, topK = 8) {
   if (index.chunks.length > 0) {
     try {
       const [queryEmbedding] = await embed(query);
-      const semanticResults = index.chunks
+      // Fail-closed: verified only, never CONFIDENTIAL
+      const semanticResults = filterTrusted(index.chunks)
         .map(chunk => ({
           score: cosineSimilarity(queryEmbedding, chunk.embedding),
           heading: chunk.heading,
