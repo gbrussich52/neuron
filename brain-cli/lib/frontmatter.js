@@ -2,9 +2,11 @@
 // Only supports flat `key: value` lines, which is all the vault uses for the
 // classification/trust fields. Nested YAML (relationships:) is preserved verbatim.
 
+// trailing \n* consumes the blank separator; setField re-adds exactly one blank line.
 const FM_RE = /^---\n([\s\S]*?)\n---\n*/;
 
 export function parseFrontmatter(content) {
+  content = content.replace(/\r\n/g, '\n');
   const m = content.match(FM_RE);
   if (!m) return { data: {}, body: content, hasFm: false, raw: '' };
   const data = {};
@@ -20,10 +22,12 @@ export function hasField(content, key) {
 }
 
 export function setField(content, key, value) {
+  content = content.replace(/\r\n/g, '\n');
   const m = content.match(FM_RE);
   const line = `${key}: ${value}`;
   if (!m) return `---\n${line}\n---\n\n${content}`;
-  const keyRe = new RegExp(`^${key}\\s*:.*$`, 'im');
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const keyRe = new RegExp(`^${escaped}\\s*:.*$`, 'im');
   let raw = m[1];
   const body = content.slice(m[0].length);
   raw = keyRe.test(raw) ? raw.replace(keyRe, line) : `${raw}\n${line}`;

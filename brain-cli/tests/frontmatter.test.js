@@ -47,4 +47,15 @@ describe('setField', () => {
     expect(out).toMatch(/\n---\n\n# Body$/);
     expect(out.startsWith('---\n')).toBe(true);
   });
+
+  it('parses a value containing a colon (e.g. a URL)', () => {
+    const md = `---\nsource: https://example.com/path\n---\n\n# B`;
+    expect(parseFrontmatter(md).data.source).toBe('https://example.com/path');
+  });
+
+  it('handles CRLF line endings', () => {
+    const md = `---\r\nclassification: PRIVATE\r\n---\r\n\r\n# Body`;
+    expect(parseFrontmatter(md).data.classification).toBe('PRIVATE');
+    expect(hasField(md, 'classification')).toBe(true);
+  });
 });
