@@ -53,6 +53,14 @@ describe('grandfatherTrust', () => {
     grandfatherTrust(vault, '2026-06-09');
     expect(parseFrontmatter(readFileSync(f, 'utf-8')).data.trust).toBe('unverified');
   });
+  it('preserves an explicit author instead of relabeling it legacy', () => {
+    const f = join(vault, 'wiki/concepts/mine.md');
+    writeFileSync(f, '---\nclassification: PRIVATE\nauthor: giani\n---\n\n# Mine');
+    grandfatherTrust(vault, '2026-06-09');
+    const { data } = parseFrontmatter(readFileSync(f, 'utf-8'));
+    expect(data.author).toBe('giani');
+    expect(data.trust).toBe('verified');
+  });
 });
 
 describe('retireReviewQueue', () => {

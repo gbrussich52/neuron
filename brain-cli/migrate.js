@@ -58,7 +58,8 @@ export function grandfatherTrust(kbDir, today) {
     content = setField(content, 'trust', 'verified');
     content = setField(content, 'source', data.source || 'pre-neuron');
     content = setField(content, 'verified_at', today);
-    content = setField(content, 'author', inferAuthor(data));
+    // Preserve an explicit author if the note already declares one; only infer when absent.
+    if (!hasField(content, 'author')) content = setField(content, 'author', inferAuthor(data));
     writeFileSync(path, content);
     changed.push(relative(kbDir, path));
   }
