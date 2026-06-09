@@ -79,4 +79,18 @@ describe('retireReviewQueue', () => {
     expect('status' in data).toBe(false);
     expect(moved).toContain('wiki/concepts/pfas.md');
   });
+  it('archives a non-draft (no status/target_path) instead of moving it to concepts', () => {
+    mkdirSync(join(vault, 'wiki', '_review'), { recursive: true });
+    writeFileSync(join(vault, 'wiki/_review/README.md'), '---\nclassification: PRIVATE\ntype: meta\n---\n\n# Readme');
+    const moved = retireReviewQueue(vault);
+    expect(fexists(join(vault, 'wiki/concepts/README.md'))).toBe(false);
+    expect(fexists(join(vault, 'Archive/_review-README.md'))).toBe(true);
+    expect(moved).not.toContain('wiki/concepts/README.md');
+  });
+  it('removes the _review directory after retiring', () => {
+    mkdirSync(join(vault, 'wiki', '_review'), { recursive: true });
+    writeFileSync(join(vault, 'wiki/_review/d.md'), '---\nstatus: pending-review\ntarget_path: wiki/concepts/d.md\n---\n\n# D');
+    retireReviewQueue(vault);
+    expect(fexists(join(vault, 'wiki/_review'))).toBe(false);
+  });
 });

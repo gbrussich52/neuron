@@ -88,16 +88,27 @@ export function retireReviewQueue(kbDir) {
     const src = join(reviewDir, name);
     let content = readFileSync(src, 'utf-8');
     const { data } = parseFrontmatter(content);
-    const targetRel = data.target_path || `wiki/concepts/${name}`;
-    content = setField(content, 'trust', 'unverified');
-    content = setField(content, 'author', 'nightly');
-    content = setField(content, 'source', 'neuron-research');
-    content = removeField(removeField(content, 'status'), 'target_path');
-    const dest = join(kbDir, targetRel);
-    mkdirSync(dirname(dest), { recursive: true });
-    writeFileSync(dest, content);
-    rmSync(src);
-    moved.push(targetRel);
+    // Only true research drafts get promoted to a target path; anything else
+    // (e.g. a meta README) is archived, never relocated into wiki/concepts.
+    const isDraft = data.status === 'pending-review' || !!data.target_path;
+    if (isDraft) {
+      const targetRel = data.target_path || `wiki/concepts/${name}`;
+      content = setField(content, 'trust', 'unverified');
+      content = setField(content, 'author', 'nightly');
+      content = setField(content, 'source', 'neuron-research');
+      content = removeField(removeField(content, 'status'), 'target_path');
+      const dest = join(kbDir, targetRel);
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, content);
+      rmSync(src);
+      moved.push(targetRel);
+    } else {
+      // Archive non-drafts (honor "never delete without archiving").
+      const archiveDest = join(kbDir, 'Archive', `_review-${name}`);
+      mkdirSync(dirname(archiveDest), { recursive: true });
+      writeFileSync(archiveDest, content);
+      rmSync(src);
+    }
   }
   rmSync(reviewDir, { recursive: true, force: true });
   return moved;
@@ -127,7 +138,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       const changed = grandfatherTrust(kbDir, today);
       console.log(`Grandfathered trust on ${changed.length} files.`);
     }
+  } else if (cmd === 'retire-review') {
+    const reviewDir = join(kbDir, 'wiki', '_review');
+    if (!apply) {
+      const drafts = existsSync(reviewDir)
+        ? readdirSync(reviewDir).filter(f => f.endsWith('.md'))
+        : [];
+      console.log(`[dry-run] ${drafts.length} .md file(s) in wiki/_review would be retired`);
+      console.log('  (drafts → target_path as trust: unverified; non-drafts → Archive/)');
+      drafts.forEach(f => console.log('  ' + f));
+    } else {
+      const moved = retireReviewQueue(kbDir);
+      console.log(`Retired wiki/_review: promoted ${moved.length} draft(s) to target paths.`);
+      moved.forEach(p => console.log('  ' + p));
+    }
   } else {
-    console.log('Usage: node migrate.js <classify|trust> [--apply]');
+    console.log('Usage: node migrate.js <classify|trust|retire-review> [--apply]');
   }
 }
