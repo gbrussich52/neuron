@@ -1,7 +1,7 @@
 // migrate.js — one-time vault migration helpers for the trust ladder.
 // Pure functions take an explicit kbDir (and date) so they are deterministic + testable.
-import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs';
-import { join, relative } from 'path';
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdirSync, rmSync } from 'fs';
+import { join, relative, dirname } from 'path';
 import { homedir } from 'os';
 import { hasField, setField, parseFrontmatter } from './lib/frontmatter.js';
 
@@ -65,7 +65,44 @@ export function grandfatherTrust(kbDir, today) {
   return changed;
 }
 
-// CLI entry: `node migrate.js <classify|trust> [--apply]` (dry-run by default).
+/** Strip a single frontmatter key from raw markdown content. */
+function removeField(content, key) {
+  const m = content.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!m) return content;
+  const raw = m[1].split('\n').filter(l => !l.match(new RegExp(`^${key}\\s*:`, 'i'))).join('\n');
+  return `---\n${raw}\n---\n${content.slice(m[0].length)}`;
+}
+
+/**
+ * Retire the old wiki/_review/ surface: move each draft to its target_path, born
+ * trust:unverified (author: nightly, source: neuron-research), strip status/target_path.
+ * The single REVIEW.md (later plan) becomes the only surface.
+ */
+export function retireReviewQueue(kbDir) {
+  const reviewDir = join(kbDir, 'wiki', '_review');
+  if (!existsSync(reviewDir)) return [];
+  const moved = [];
+  for (const name of readdirSync(reviewDir)) {
+    if (!name.endsWith('.md')) continue;
+    const src = join(reviewDir, name);
+    let content = readFileSync(src, 'utf-8');
+    const { data } = parseFrontmatter(content);
+    const targetRel = data.target_path || `wiki/concepts/${name}`;
+    content = setField(content, 'trust', 'unverified');
+    content = setField(content, 'author', 'nightly');
+    content = setField(content, 'source', 'neuron-research');
+    content = removeField(removeField(content, 'status'), 'target_path');
+    const dest = join(kbDir, targetRel);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, content);
+    rmSync(src);
+    moved.push(targetRel);
+  }
+  rmSync(reviewDir, { recursive: true, force: true });
+  return moved;
+}
+
+// CLI entry: `node migrate.js <classify|trust|retire-review> [--apply]` (dry-run by default).
 if (import.meta.url === `file://${process.argv[1]}`) {
   const kbDir = process.env.KB_DIR || join(homedir(), 'knowledge-base');
   const cmd = process.argv[2];

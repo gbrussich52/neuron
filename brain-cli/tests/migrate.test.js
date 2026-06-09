@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { backfillClassification, grandfatherTrust } from '../migrate.js';
+import { backfillClassification, grandfatherTrust, retireReviewQueue } from '../migrate.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
+import { existsSync as fexists } from 'fs';
 
 let vault;
 beforeEach(() => {
@@ -51,5 +52,23 @@ describe('grandfatherTrust', () => {
     writeFileSync(f, '---\nclassification: PRIVATE\ntrust: unverified\n---\n\n# New');
     grandfatherTrust(vault, '2026-06-09');
     expect(parseFrontmatter(readFileSync(f, 'utf-8')).data.trust).toBe('unverified');
+  });
+});
+
+describe('retireReviewQueue', () => {
+  it('moves a draft to its target_path as unverified and removes the field', () => {
+    mkdirSync(join(vault, 'wiki', '_review'), { recursive: true });
+    const draft = join(vault, 'wiki/_review/pfas.md');
+    writeFileSync(draft, '---\nclassification: PRIVATE\nstatus: pending-review\ntarget_path: wiki/concepts/pfas.md\n---\n\n# PFAS');
+    const moved = retireReviewQueue(vault);
+    const dest = join(vault, 'wiki/concepts/pfas.md');
+    expect(fexists(dest)).toBe(true);
+    expect(fexists(draft)).toBe(false);
+    const { data } = parseFrontmatter(readFileSync(dest, 'utf-8'));
+    expect(data.trust).toBe('unverified');
+    expect(data.author).toBe('nightly');
+    expect(data.source).toBe('neuron-research');
+    expect('status' in data).toBe(false);
+    expect(moved).toContain('wiki/concepts/pfas.md');
   });
 });
