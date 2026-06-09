@@ -33,4 +33,7 @@ describe('approvals log', () => {
   it('returns [] when the log does not exist', () => {
     expect(readEntries(vault)).toEqual([]);
   });
+  it('refuses an entry with no approver (audit integrity)', () => {
+    expect(() => appendEntry(vault, { action: 'approve', slug: 'a.md', content_hash: 'h' })).toThrow(/approver/);
+  });
 });

@@ -6,12 +6,15 @@ import { join } from 'path';
 
 const LOG_NAME = 'approvals.log';
 
+/** Append an audit entry. `approver` is required — audit records must never
+ *  be silently attributed to a default identity. */
 export function appendEntry(kbDir, { action, slug, content_hash, approver }) {
+  if (!approver) throw new Error('appendEntry requires an explicit approver');
   const entry = {
     action,
     slug,
     content_hash: content_hash || null,
-    approver: approver || 'giani',
+    approver,
     ts: new Date().toISOString(),
   };
   appendFileSync(join(kbDir, LOG_NAME), JSON.stringify(entry) + '\n');

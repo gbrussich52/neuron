@@ -29,4 +29,9 @@ describe('resolveSlug', () => {
   it('throws on a missing slug', () => {
     expect(() => resolveSlug(vault, 'nope')).toThrow(/No note found/);
   });
+  it('throws on a slug that traverses outside the vault', () => {
+    writeFileSync(join(vault, '..', 'escape-target.md'), '# X');
+    expect(() => resolveSlug(vault, '../escape-target')).toThrow(/outside the vault/);
+    rmSync(join(vault, '..', 'escape-target.md'), { force: true });
+  });
 });

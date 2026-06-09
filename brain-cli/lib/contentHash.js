@@ -7,7 +7,7 @@ import { parseFrontmatter } from './frontmatter.js';
 
 export function computeContentHash(content) {
   const { body } = parseFrontmatter(content);
-  return createHash('sha256').update(body.trim(), 'utf8').digest('hex');
+  return createHash('sha256').update(body.trim()).digest('hex');
 }
 
 /**
