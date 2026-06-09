@@ -40,4 +40,11 @@ describe('setField', () => {
     expect(parseFrontmatter(out).data.trust).toBe('verified');
     expect(out.match(/trust:/g)).toHaveLength(1);
   });
+
+  it('keeps a blank line between frontmatter and body when modifying', () => {
+    const md = `---\nclassification: PRIVATE\n---\n\n# Body`;
+    const out = setField(md, 'trust', 'verified');
+    expect(out).toMatch(/\n---\n\n# Body$/);
+    expect(out.startsWith('---\n')).toBe(true);
+  });
 });

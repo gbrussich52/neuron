@@ -27,5 +27,5 @@ export function setField(content, key, value) {
   let raw = m[1];
   const body = content.slice(m[0].length);
   raw = keyRe.test(raw) ? raw.replace(keyRe, line) : `${raw}\n${line}`;
-  return `---\n${raw}\n---\n${body}`;
+  return `---\n${raw}\n---\n\n${body}`;
 }
