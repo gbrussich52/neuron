@@ -15,6 +15,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { join, basename, relative, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
+import { parseFrontmatter } from './lib/frontmatter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const KB_DIR = process.env.KB_DIR || join(homedir(), 'knowledge-base');
@@ -90,6 +91,32 @@ function chunkByHeading(content, filePath) {
   }
 
   return chunks;
+}
+
+/**
+ * Read the trust-relevant metadata from a note's frontmatter.
+ */
+export function readNoteMeta(content) {
+  const { data } = parseFrontmatter(content);
+  return {
+    classification: data.classification || null,
+    trust: data.trust || null,
+    author: data.author || null,
+    source: data.source || null,
+  };
+}
+
+/**
+ * Build the indexable chunks for one file, classification-aware.
+ * CONFIDENTIAL files are NEVER indexed (returns []). Every chunk is tagged
+ * with classification (default PRIVATE) and trust (default unverified — fail-closed).
+ */
+export function chunksForFile(content, relativePath) {
+  const meta = readNoteMeta(content);
+  if (meta.classification === 'CONFIDENTIAL') return [];
+  const classification = meta.classification || 'PRIVATE';
+  const trust = meta.trust || 'unverified';
+  return chunkByHeading(content, relativePath).map(c => ({ ...c, classification, trust }));
 }
 
 // ── File Discovery ────────────────────────────────────────────
@@ -205,8 +232,7 @@ export async function buildIndex() {
   const allChunks = [];
   for (const file of files) {
     const content = readFileSync(file.path, 'utf-8');
-    const chunks = chunkByHeading(content, file.relativePath);
-    allChunks.push(...chunks);
+    allChunks.push(...chunksForFile(content, file.relativePath));
   }
   console.log(`  Created ${allChunks.length} chunks`);
 
@@ -230,6 +256,8 @@ export async function buildIndex() {
       heading: chunk.heading,
       text: chunk.text.slice(0, 500), // Store truncated text for display
       file: chunk.file,
+      classification: chunk.classification,
+      trust: chunk.trust,
       embedding: embeddings[i],
     })),
   };
@@ -277,8 +305,7 @@ export async function incrementalUpdate() {
   const newChunks = [];
   for (const file of changed) {
     const content = readFileSync(file.path, 'utf-8');
-    const chunks = chunkByHeading(content, file.relativePath);
-    newChunks.push(...chunks);
+    newChunks.push(...chunksForFile(content, file.relativePath));
   }
 
   if (newChunks.length > 0) {
@@ -290,6 +317,8 @@ export async function incrementalUpdate() {
         heading: newChunks[i].heading,
         text: newChunks[i].text.slice(0, 500),
         file: newChunks[i].file,
+        classification: newChunks[i].classification,
+        trust: newChunks[i].trust,
         embedding: embeddings[i],
       });
     }
