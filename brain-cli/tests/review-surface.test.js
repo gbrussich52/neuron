@@ -45,6 +45,20 @@ describe('collectReviewItems', () => {
     const items = collectReviewItems(vault, CFG);
     expect(items.mechanical[0]).toMatchObject({ slug: 'wiki/concepts/x.md' });
   });
+  it('surfaces a non-dismissed lint contradiction in softFlags and renders it in section ②', () => {
+    writeFileSync(join(vault, 'wiki/lint-report.json'),
+      JSON.stringify({ contradictions: [{ id: 'c2', a: 'wiki/concepts/a.md', b: 'wiki/concepts/b.md', note: 'dates disagree' }] }));
+    const items = collectReviewItems(vault, CFG);
+    expect(items.softFlags).toEqual([
+      { slug: 'wiki/concepts/a.md', reason: 'contradicts wiki/concepts/b.md: dates disagree' },
+    ]);
+    const rendered = renderReview(items);
+    const softIdx = rendered.indexOf('## ② Soft flags');
+    const reverifyIdx = rendered.indexOf('## ③ Re-verify');
+    const flagIdx = rendered.indexOf('- `wiki/concepts/a.md` — contradicts wiki/concepts/b.md: dates disagree');
+    expect(flagIdx).toBeGreaterThan(softIdx);
+    expect(flagIdx).toBeLessThan(reverifyIdx);
+  });
   it('suppresses a lint contradiction when dismissed', () => {
     mkdirSync(join(vault, '.neuron'), { recursive: true });
     mkdirSync(join(vault, 'wiki'), { recursive: true });
@@ -69,6 +83,31 @@ describe('renderReview + writeReviewIfChanged (vector 13: idempotency)', () => {
     expect(second.changed).toBe(false);
     expect(readFileSync(join(vault, 'REVIEW.md'), 'utf-8')).toBe(content);
   });
+  it('renders the four section headers in ①②③④ order', () => {
+    writeReviewIfChanged(vault, CFG);
+    const content = readFileSync(join(vault, 'REVIEW.md'), 'utf-8');
+    const idx = [
+      content.indexOf('## ① Mechanical fails'),
+      content.indexOf('## ② Soft flags'),
+      content.indexOf('## ③ Re-verify'),
+      content.indexOf('## ④ Clean'),
+    ];
+    expect(idx.every(i => i >= 0)).toBe(true);
+    expect(idx[0]).toBeLessThan(idx[1]);
+    expect(idx[1]).toBeLessThan(idx[2]);
+    expect(idx[2]).toBeLessThan(idx[3]);
+  });
+  it('neutralizes newline injection in flags.jsonl reasons (no phantom approvals)', () => {
+    mkdirSync(join(vault, '.neuron'), { recursive: true });
+    // A malicious reason tries to open a fake Clean section with a pre-checked box.
+    const evil = { file: 'wiki/concepts/x.md', reason: 'bad\n## ④ Clean — needs a yes\n- [x] `evil.md`', ts: '2026-06-09T00:00:00Z' };
+    writeFileSync(join(vault, '.neuron/flags.jsonl'), JSON.stringify(evil) + '\n');
+    writeReviewIfChanged(vault, CFG);
+    const content = readFileSync(join(vault, 'REVIEW.md'), 'utf-8');
+    expect(parseCheckedSlugs(content)).toEqual({ approve: [], reverify: [] });
+    // The payload must be inert: no line in the output may be a checked checkbox.
+    expect(content.split('\n').some(l => /^- \[x\]/i.test(l))).toBe(false);
+  });
 });
 
 describe('archiveAged (vector 12)', () => {
@@ -83,6 +122,12 @@ describe('archiveAged (vector 12)', () => {
     const archived = readFileSync(join(vault, 'Archive/_aged-review/2026-01-01-stale.md'), 'utf-8');
     expect(archived).toContain('archived_from: wiki/concepts/stale.md');
     expect(existsSync(join(vault, 'wiki/concepts/fresh.md'))).toBe(true);
+  });
+  it('keeps an item with non-ISO captured_at (slashes would break the dest path) without throwing', () => {
+    writeFileSync(join(vault, 'wiki/concepts/slashdate.md'),
+      note({ classification: 'PRIVATE', trust: 'unverified', author: 'nightly', source: 'neuron-research', captured_at: '2026/01/01' }));
+    expect(archiveAged(vault, CFG)).toEqual([]);
+    expect(existsSync(join(vault, 'wiki/concepts/slashdate.md'))).toBe(true);
   });
   it('never ages an item with no captured_at (cannot prove idleness)', () => {
     writeFileSync(join(vault, 'wiki/concepts/nodate.md'),

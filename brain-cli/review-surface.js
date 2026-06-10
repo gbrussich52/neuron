@@ -10,6 +10,20 @@ import { walkMarkdown } from './migrate.js';
 
 const DAY_MS = 86400000;
 
+// Strict ISO date (YYYY-MM-DD). archiveAged embeds captured_at into the dest
+// filename — a value like `2026/01/01` passes Date.parse but would explode the
+// path into subdirectories and throw ENOENT mid-run (partial archive).
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// REVIEW.md is parsed line-by-line by parseCheckedSlugs, so any externally
+// sourced string (flags.jsonl, lint-report.json) that reaches the rendered
+// output MUST NOT contain newlines — an embedded "\n## ④ Clean\n- [x] `evil.md`"
+// would section-switch the parser and inject a phantom approval.
+const sanitizeReason = r => (r || '').replace(/[\r\n]/g, ' ').slice(0, 200);
+// Slugs additionally strip backticks: a backtick inside the inline-code span
+// would terminate it early and let the remainder render as live markdown.
+const sanitizeSlug = s => (s || '').replace(/[\r\n`]/g, '');
+
 function readJsonl(path) {
   if (!existsSync(path)) return [];
   return readFileSync(path, 'utf-8').split('\n').filter(Boolean)
@@ -29,8 +43,12 @@ function hasReciprocalContradicts(kbDir, a, b) {
   const check = (file, other) => {
     const path = join(kbDir, file);
     if (!existsSync(path)) return false;
-    const { raw } = parseFrontmatter(readFileSync(path, 'utf-8'));
-    return /type:\s*contradicts/i.test(raw) && raw.includes(basename(other, '.md'));
+    try {
+      const { raw } = parseFrontmatter(readFileSync(path, 'utf-8'));
+      return /type:\s*contradicts/i.test(raw) && raw.includes(basename(other, '.md'));
+    } catch {
+      return false; // unreadable → cannot confirm reciprocity → flag stays visible
+    }
   };
   return check(a, b) && check(b, a);
 }
@@ -55,12 +73,25 @@ export function collectReviewItems(kbDir, config = {}) {
   // ① Sync-detected issues that cannot be derived from tree state (rebase
   // conflicts, quarantined CONFIDENTIAL, push failures) — written by neuron-sync.sh.
   for (const f of readJsonl(join(kbDir, '.neuron', 'flags.jsonl'))) {
-    mechanical.push({ slug: f.file || '(sync)', reason: f.reason || 'sync flag' });
+    // flags.jsonl is written by shell scripts from git output — treat both
+    // fields as untrusted and strip newlines/backticks before they can render.
+    mechanical.push({
+      slug: sanitizeSlug(f.file) || '(sync)',
+      reason: sanitizeReason(f.reason) || 'sync flag',
+    });
   }
 
   for (const path of walkMarkdown(kbDir)) {
     const rel = relative(kbDir, path);
-    const { data } = parseFrontmatter(readFileSync(path, 'utf-8'));
+    let data;
+    try {
+      ({ data } = parseFrontmatter(readFileSync(path, 'utf-8')));
+    } catch (err) {
+      // Surface unreadable files instead of crashing the whole regen or
+      // silently dropping them — fail-closed into the mechanical section.
+      mechanical.push({ slug: rel, reason: `unreadable: ${sanitizeReason(err.message)}` });
+      continue;
+    }
     if (data.trust === 'rejected') continue; // terminal — no further action needed
 
     if (data.trust === 'verified') {
@@ -93,13 +124,16 @@ export function collectReviewItems(kbDir, config = {}) {
     const id = c.id || `${c.a || ''}~${c.b || ''}`;
     if (dismissed.has(id)) continue;
     if (hasReciprocalContradicts(kbDir, c.a, c.b)) continue;
+    // lint-report.json is LLM-generated — sanitize before it can reach REVIEW.md.
     softFlags.push({
-      slug: c.a || '(unknown)',
-      reason: `contradicts ${c.b || '?'}${c.note ? `: ${c.note}` : ''}`,
+      slug: sanitizeSlug(c.a) || '(unknown)',
+      reason: sanitizeReason(`contradicts ${sanitizeSlug(c.b) || '?'}${c.note ? `: ${c.note}` : ''}`),
     });
   }
 
-  const bySlug = (x, y) => x.slug.localeCompare(y.slug);
+  // Fixed byte-order comparator — localeCompare output varies by ICU build,
+  // which would make REVIEW.md ordering machine-dependent (churn across hosts).
+  const bySlug = (x, y) => (x.slug < y.slug ? -1 : x.slug > y.slug ? 1 : 0);
   mechanical.sort(bySlug);
   softFlags.sort(bySlug);
   reverify.sort(bySlug);
@@ -170,27 +204,39 @@ export function writeReviewIfChanged(kbDir, config = {}) {
  * and basename, the dest filename is suffixed with a counter (e.g. -2, -3) so no
  * write clobbers a previously archived file.
  *
- * No captured_at → cannot prove idleness → kept in place.
+ * No captured_at (or a non-ISO one) → cannot prove idleness → kept in place.
  */
 export function archiveAged(kbDir, config = {}) {
   const agingDays = config.trust?.aging_archive_days ?? 30;
   const now = Date.now();
   const moved = [];
   const destDir = join(kbDir, 'Archive', '_aged-review');
+  let destDirReady = false; // create lazily, once — no empty dir on a no-op run
 
   for (const path of walkMarkdown(kbDir)) {
     const rel = relative(kbDir, path);
-    const content = readFileSync(path, 'utf-8');
-    const { data } = parseFrontmatter(content);
+    let content, data;
+    try {
+      content = readFileSync(path, 'utf-8');
+      ({ data } = parseFrontmatter(content));
+    } catch {
+      continue; // unreadable → leave in place; collectReviewItems surfaces it
+    }
 
     if (data.trust !== 'unverified') continue;
 
-    // No captured_at → cannot prove idleness → keep
-    const captured = Date.parse(data.captured_at || '');
+    // Strict ISO format required: captured_at becomes part of the dest filename,
+    // so `2026/01/01` (valid to Date.parse) would create nested dirs / ENOENT.
+    // Non-ISO = unprovable idleness = keep.
+    if (!ISO_DATE_RE.test(data.captured_at || '')) continue;
+    const captured = Date.parse(data.captured_at);
     if (Number.isNaN(captured)) continue;
     if ((now - captured) / DAY_MS <= agingDays) continue;
 
-    mkdirSync(destDir, { recursive: true });
+    if (!destDirReady) {
+      mkdirSync(destDir, { recursive: true });
+      destDirReady = true;
+    }
 
     // Build the destination filename, adding provenance fields
     let stamped = setField(content, 'archived_from', rel);
