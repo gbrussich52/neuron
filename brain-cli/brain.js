@@ -641,6 +641,11 @@ const [,, command, ...args] = process.argv;
       case 'deep-research': await cmdDeepResearch(args); break;
       case 'improve': await cmdImprove(args); break;
       case 'review': await cmdReview(args); break;
+      case 'validate': {
+        const { runValidate } = await import(join(__dirname, 'validate.js'));
+        await runValidate(args);
+        break;
+      }
       case 'config': cmdConfig(args); break;
       case 'status': cmdStatus(); break;
       case 'daily': await cmdDaily(); break;
@@ -694,6 +699,8 @@ const [,, command, ...args] = process.argv;
                         --max-iterations N  --target-grade A-F  --dry-run
     review [list|next|  Review queue: approve/reject autonomous research
       approve|reject <n>]
+    validate --sweep    Stamp trust/hash on unswept notes (dry-run default)
+      [--apply]
 
   Config:
     config                Show current provider, models, features
