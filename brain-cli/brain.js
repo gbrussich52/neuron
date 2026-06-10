@@ -646,6 +646,13 @@ const [,, command, ...args] = process.argv;
         await runValidate(args);
         break;
       }
+      case 'approve':
+      case 'reject':
+      case 'reverify': {
+        const { runTrustCommand } = await import(join(__dirname, 'trust-cli.js'));
+        await runTrustCommand(command, args);
+        break;
+      }
       case 'config': cmdConfig(args); break;
       case 'status': cmdStatus(); break;
       case 'daily': await cmdDaily(); break;
@@ -700,7 +707,10 @@ const [,, command, ...args] = process.argv;
     review [list|next|  Review queue: approve/reject autonomous research
       approve|reject <n>]
     validate --sweep    Stamp trust/hash on unswept notes (dry-run default)
-      [--apply]
+                        [--apply]
+    approve <slug>      Verify a pending note (binds approval to its content hash)
+    reject <slug>       Reject a pending note (terminal; archived, never deleted)
+    reverify <slug>     Restamp a verified note past its re-verify TTL
 
   Config:
     config                Show current provider, models, features
