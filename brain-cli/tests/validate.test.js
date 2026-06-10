@@ -63,6 +63,47 @@ describe('validateFile', () => {
   });
 });
 
+describe('adversarial: trust-bypass vectors', () => {
+  it('trust: Verified (case games) + hash mismatch → normalized AND demoted', () => {
+    let note = '---\nclassification: PRIVATE\ntrust: Verified\nauthor: claude\nsource: session\nverified_at: 2026-06-09\ncaptured_at: 2026-06-09\n---\n\n# Note\nbody';
+    note = setField(note, 'content_hash', 'stale-hash');
+    const { content, changes } = validateFile(note, { relPath: 'wiki/concepts/c.md', kbDir: vault });
+    const { data } = parseFrontmatter(content);
+    expect(data.trust).toBe('unverified');
+    expect(changes.join(' ')).toMatch(/normalized/);
+    expect(changes.join(' ')).toMatch(/demoted/);
+  });
+  it('trust: Rejected (case games) + stale hash + matching approve entry → stays rejected', () => {
+    let note = '---\nclassification: PRIVATE\ntrust: Rejected\nauthor: claude\nsource: session\ncaptured_at: 2026-06-09\nrejected_at: 2026-06-09\n---\n\n# Note\nbody';
+    note = setField(note, 'content_hash', 'stale');
+    appendEntry(vault, { action: 'approve', slug: 'wiki/concepts/rj.md', content_hash: computeContentHash(note), approver: 'giani' });
+    const { content } = validateFile(note, { relPath: 'wiki/concepts/rj.md', kbDir: vault });
+    expect(parseFrontmatter(content).data.trust).toBe('rejected');
+  });
+  it('approve(H) then a later reject(H) → NOT promoted (reject wins)', () => {
+    let note = '---\nclassification: PRIVATE\ntrust: unverified\nauthor: claude\nsource: session\ncaptured_at: 2026-06-09\n---\n\n# Note\ncontested body';
+    note = setField(note, 'content_hash', 'stale-old-hash');
+    const h = computeContentHash(note);
+    appendEntry(vault, { action: 'approve', slug: 'wiki/concepts/ar.md', content_hash: h, approver: 'giani' });
+    appendEntry(vault, { action: 'reject', slug: 'wiki/concepts/ar.md', content_hash: h, approver: 'giani' });
+    const { content } = validateFile(note, { relPath: 'wiki/concepts/ar.md', kbDir: vault });
+    expect(parseFrontmatter(content).data.trust).toBe('unverified');
+  });
+  it('duplicate trust keys: first-wins on parse, exactly ONE trust line after validateFile', () => {
+    const note = '---\nclassification: PRIVATE\ntrust: unverified\ntrust: verified\nauthor: claude\nsource: session\ncaptured_at: 2026-06-09\n---\n\n# Note\nbody';
+    expect(parseFrontmatter(note).data.trust).toBe('unverified');
+    const { content } = validateFile(note, { relPath: 'wiki/concepts/d.md', kbDir: vault });
+    expect(parseFrontmatter(content).data.trust).toBe('unverified');
+    expect(content.match(/^trust\s*:/gim)).toHaveLength(1);
+  });
+  it('classification: confidential (lowercase) → normalized to CONFIDENTIAL', () => {
+    const note = '---\nclassification: confidential\ntrust: unverified\nauthor: claude\nsource: session\ncaptured_at: 2026-06-09\n---\n\n# Note\nbody';
+    const { content, changes } = validateFile(note, { relPath: 'wiki/concepts/cf.md', kbDir: vault });
+    expect(parseFrontmatter(content).data.classification).toBe('CONFIDENTIAL');
+    expect(changes.join(' ')).toMatch(/normalized/);
+  });
+});
+
 describe('runSweep', () => {
   it('dry-run reports but does not write; --apply writes; second sweep is a no-op', () => {
     const f = join(vault, 'wiki/concepts/new.md');

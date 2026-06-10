@@ -10,7 +10,7 @@
 //     one demotes to `unverified` and re-enters REVIEW.md
 //   - `rejected` is terminal: only the hash restamps, trust never resurrects
 import { readFileSync, writeFileSync } from 'fs';
-import { join, relative } from 'path';
+import { join, relative, resolve, sep } from 'path';
 import { homedir } from 'os';
 import { parseFrontmatter, hasField, setField } from './lib/frontmatter.js';
 import { computeContentHash } from './lib/contentHash.js';
@@ -29,6 +29,7 @@ const defaultVault = () => process.env.KB_DIR || join(homedir(), 'knowledge-base
 export function validateFile(content, { author, relPath = '', kbDir = null } = {}) {
   const changes = [];
   let out = content;
+  const date = today(); // cached once — a midnight tick must not split the stamps
   const stampAuthor = author || process.env.NEURON_AUTHOR || 'unknown';
 
   if (!hasField(out, 'classification')) {
@@ -40,20 +41,43 @@ export function validateFile(content, { author, relPath = '', kbDir = null } = {
     changes.push(`author: ${stampAuthor}`);
   }
   if (!hasField(out, 'captured_at')) {
-    out = setField(out, 'captured_at', today());
-    changes.push(`captured_at: ${today()}`);
+    out = setField(out, 'captured_at', date);
+    changes.push(`captured_at: ${date}`);
   }
   if (!hasField(out, 'trust')) {
     // Born verified ONLY for the user's own writes; everything else quarantines.
     const a = parseFrontmatter(out).data.author;
     const trust = a === 'giani' ? 'verified' : 'unverified';
     out = setField(out, 'trust', trust);
-    if (trust === 'verified') out = setField(out, 'verified_at', today());
+    if (trust === 'verified') out = setField(out, 'verified_at', date);
     changes.push(`trust: ${trust}`);
   }
 
+  // Normalize semantic field casing — `Trust: Verified` or `classification: confidential`
+  // must not dodge the trust rules or the read-side CONFIDENTIAL checks (=== comparisons).
+  let d = parseFrontmatter(out).data;
+  if (d.trust && d.trust !== d.trust.toLowerCase()) {
+    out = setField(out, 'trust', d.trust.toLowerCase());
+    changes.push(`trust: normalized casing (${d.trust})`);
+  }
+  if (d.classification && d.classification !== d.classification.toUpperCase()) {
+    out = setField(out, 'classification', d.classification.toUpperCase());
+    changes.push(`classification: normalized casing (${d.classification})`);
+  }
+  // Collapse duplicate semantic keys — parse is first-wins, but the smuggled
+  // second line must not survive on disk (setField rewrites to exactly one line
+  // carrying the first-wins value).
+  for (const key of ['trust', 'classification']) {
+    const keyRe = new RegExp(`^${key}\\s*:`, 'i');
+    const count = parseFrontmatter(out).raw.split('\n').filter(l => keyRe.test(l)).length;
+    if (count > 1) {
+      out = setField(out, key, parseFrontmatter(out).data[key]);
+      changes.push(`${key}: collapsed ${count} duplicate keys`);
+    }
+  }
+
   const hash = computeContentHash(out);
-  const { data } = parseFrontmatter(out);
+  const data = parseFrontmatter(out).data; // re-parsed: normalized casing/dedupe applied
   if (!data.content_hash) {
     out = setField(out, 'content_hash', hash); // metadata-only: trust unchanged
     changes.push('content_hash: stamped');
@@ -62,10 +86,14 @@ export function validateFile(content, { author, relPath = '', kbDir = null } = {
     if (data.trust === 'rejected') {
       changes.push('content_hash: restamped (rejected is terminal)');
     } else {
+      // An approval only stands if no LATER reject entry exists for the slug —
+      // approve-then-reject must resolve to rejected, not resurrect to verified.
       const approval = kbDir && relPath ? latestFor(kbDir, relPath, 'approve') : null;
-      if (approval && approval.content_hash === hash) {
+      const rejection = kbDir && relPath ? latestFor(kbDir, relPath, 'reject') : null;
+      const approvalStands = approval && (!rejection || approval.ts > rejection.ts);
+      if (approvalStands && approval.content_hash === hash) {
         out = setField(out, 'trust', 'verified');
-        out = setField(out, 'verified_at', today());
+        out = setField(out, 'verified_at', date);
         changes.push('trust: verified (approval matches new hash)');
       } else if (data.trust === 'verified') {
         out = setField(out, 'trust', 'unverified');
@@ -87,11 +115,16 @@ export function runSweep(kbDir, { apply = false, author } = {}) {
   const report = [];
   for (const path of walkMarkdown(kbDir)) {
     const rel = relative(kbDir, path);
-    const original = readFileSync(path, 'utf-8');
-    const { content, changes } = validateFile(original, { author, relPath: rel, kbDir });
-    if (changes.length === 0) continue;
-    report.push({ file: rel, changes });
-    if (apply) writeFileSync(path, content);
+    try {
+      const original = readFileSync(path, 'utf-8');
+      const { content, changes } = validateFile(original, { author, relPath: rel, kbDir });
+      if (changes.length === 0) continue;
+      report.push({ file: rel, changes });
+      if (apply) writeFileSync(path, content);
+    } catch (err) {
+      // One unreadable/unwritable file must not abort the whole sweep.
+      report.push({ file: rel, changes: ['ERROR: ' + err.message] });
+    }
   }
   return report;
 }
@@ -110,12 +143,18 @@ export async function runValidate(args, kbDir = defaultVault()) {
     report = runSweep(kbDir, { apply });
   } else {
     for (const f of files) {
-      const path = join(kbDir, f);
-      const original = readFileSync(path, 'utf-8');
+      // Containment: a relative arg like ../../etc must not escape the vault.
+      const abs = resolve(kbDir, f);
+      if (!abs.startsWith(resolve(kbDir) + sep)) {
+        console.error(`Path escapes vault: ${f}`);
+        process.exitCode = 1;
+        continue;
+      }
+      const original = readFileSync(abs, 'utf-8');
       const { content, changes } = validateFile(original, { relPath: f, kbDir });
       if (changes.length === 0) continue;
       report.push({ file: f, changes });
-      if (apply) writeFileSync(path, content);
+      if (apply) writeFileSync(abs, content);
     }
   }
   const mode = apply ? '' : '[dry-run] ';
