@@ -249,6 +249,8 @@ Output only the report content (no frontmatter).`,
     outDir = join(KB_DIR, 'wiki', 'concepts');
     mkdirSync(outDir, { recursive: true });
     const candidatePath = join(outDir, `${topicSlug}.md`);
+    // Collision → suffixed -update draft. Accumulation of update drafts is bounded
+    // by the nightly path's backlog cap (Plan 3), not enforced here.
     outFile = existsSync(candidatePath)
       ? join(outDir, `${topicSlug}-update-${ts}.md`)
       : candidatePath;
@@ -310,17 +312,6 @@ Output only the report content (no frontmatter).`,
   return outFile;
 }
 
-// ── Public API ────────────────────────────────────────────────
-
-/**
- * Run the full autonomous research pipeline.
- *
- * @param {string} topic - Research topic.
- * @param {Object} [opts]
- * @param {boolean} [opts.routeToReview=false] - When true, the synthesis report is written
- *   to wiki/concepts/ born trust: unverified (instead of wiki/queries/). Pass this from
- *   the improvement loop; do NOT pass it from cmdResearch (human-invoked path).
- */
 // ── Web Research (claude-native, no Tavily required) ──────────
 
 /**
@@ -331,7 +322,8 @@ Output only the report content (no frontmatter).`,
  * Same execute-mode pattern as lint.sh/compile.sh:
  * --permission-mode acceptEdits is required or claude silently no-ops Write.
  */
-async function runWebResearch(topic) {
+async function runWebResearch(topic, opts = {}) {
+  const { routeToReview = false } = opts;
   const slug = slugify(topic, 60);
   // Draft lands at its FINAL path in wiki/concepts/ born unverified; never writes
   // to the retired wiki/_review/ queue. Never overwrite an existing article.
@@ -339,6 +331,8 @@ async function runWebResearch(topic) {
   mkdirSync(conceptsDir, { recursive: true });
   const ts = timestamp();
   const candidatePath = join(conceptsDir, `${slug}.md`);
+  // Collision → suffixed -update draft. Accumulation of update drafts is bounded
+  // by the nightly path's backlog cap (Plan 3), not enforced here.
   const outFile = existsSync(candidatePath)
     ? join(conceptsDir, `${slug}-update-${ts}.md`)
     : candidatePath;
@@ -404,12 +398,29 @@ Rules:
   if (!existsSync(outFile)) {
     throw new Error(`Web research did not produce expected file: ${outFile}`);
   }
+
+  // Stamp content_hash on review-routed drafts (consistency with synthesizeReport):
+  // the LLM wrote the file, so read it back, hash the body, and restamp.
+  if (routeToReview) {
+    const written = readFileSync(outFile, 'utf-8');
+    writeFileSync(outFile, setField(written, 'content_hash', computeContentHash(written)));
+  }
+
   console.log(`  Draft → wiki/concepts/${basename(outFile)} (trust: unverified — approve via REVIEW.md)`);
   return { reportFile: outFile };
 }
 
 // ── Public Entry Points ───────────────────────────────────────
 
+/**
+ * Run the full autonomous research pipeline.
+ *
+ * @param {string} topic - Research topic.
+ * @param {Object} [opts]
+ * @param {boolean} [opts.routeToReview=false] - When true, the synthesis report is written
+ *   to wiki/concepts/ born trust: unverified (instead of wiki/queries/). Pass this from
+ *   the improvement loop; do NOT pass it from cmdResearch (human-invoked path).
+ */
 export async function runResearch(topic, opts = {}) {
   const { routeToReview = false } = opts;
   if (!topic) {
@@ -422,7 +433,7 @@ export async function runResearch(topic, opts = {}) {
   // Works without TAVILY_API_KEY. When routeToReview is true (improvement loop),
   // the draft lands at its final path in wiki/concepts/ born trust: unverified.
   if (routeToReview || !process.env.TAVILY_API_KEY) {
-    const result = await runWebResearch(topic);
+    const result = await runWebResearch(topic, { routeToReview });
     if (!routeToReview) {
       console.log(`  Article drafted: ${result.reportFile}`);
       console.log(`  Approve via: neuron approve <slug>   or check box in REVIEW.md`);

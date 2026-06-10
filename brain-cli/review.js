@@ -23,7 +23,12 @@ export async function runReview(args, vaultRoot = defaultVault()) {
   try {
     const { loadConfig } = await import('./providers.js');
     config = loadConfig();
-  } catch { /* temp vaults / missing config: defaults */ }
+  } catch (e) {
+    // Temp vaults / missing module: silent defaults. Anything else (e.g. malformed
+    // neuron.config.json in the real vault) must be visible — a silent fallback
+    // would quietly swap the configured TTLs for defaults.
+    if (e.code !== 'MODULE_NOT_FOUND') console.warn(`[neuron] config load failed — using defaults (${e.message})`);
+  }
 
   if (args[0] === 'apply') {
     const reviewPath = join(vaultRoot, 'REVIEW.md');
