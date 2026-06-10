@@ -1,6 +1,6 @@
 {
   "name": "neuron-cli",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Neuron — LLM-powered second brain CLI. Watches Inbox, auto-processes knowledge, surfaces insights.",
   "main": "brain.js",
   "bin": {

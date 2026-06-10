@@ -68,10 +68,17 @@ You → Inbox/              Drop anything: URLs, files, YouTube links, brain dum
 - **Run fully local** — switch to Ollama + Gemma 4 in `neuron.config.json` for zero API cost operation
 - **Zero-change default** — defaults to `claude-cli`, existing behavior preserved byte-for-byte
 
+**Trust ladder (v2)**
+- **Quarantine by default** — agent/LLM writes are born `trust: unverified`; only your own writes are born `verified`. Search serves verified notes only (fail-closed), so the AI never cites its own unreviewed output as fact
+- **REVIEW.md** — one auto-generated approval surface at the vault root: mechanical fails, soft flags, re-verify lane, and clean drafts awaiting a yes. Check a box and sync, or `neuron approve|reject|reverify <slug>`
+- **Hash-bound approval** — approving records the note's body sha256 in an append-only `approvals.log`; any later edit to an approved body automatically re-quarantines it
+- **Sweep** — `neuron validate --sweep` stamps trust/classification/hash on any unswept write (Obsidian saves, write-and-exit agents)
+- **Authoritative chokepoint** — `scripts/neuron-sync.sh` owns every commit: sweep → apply your checkboxes → allowlist staging (never `git add -A`) → tree-state CONFIDENTIAL + credential scan → commit; a leak holds the push, never your safe files
+
 **Security**
 - **Classification system** — every file labeled PUBLIC/PRIVATE/CONFIDENTIAL
-- **Credential scanning** — detects API keys, JWTs, tokens, passwords
-- **`.gitignore` enforcement** — private/confidential files never committed
+- **Credential scanning** — detects API keys, JWTs, tokens, passwords (pre-commit hook + pre-push tree scan)
+- **`.gitignore` enforcement** — private/confidential files never committed; CONFIDENTIAL files auto-quarantined if ever staged
 - **Obsidian CSS badges** — green/orange/red visual indicators
 
 **Automation**
