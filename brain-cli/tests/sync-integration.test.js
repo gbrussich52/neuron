@@ -220,4 +220,27 @@ describe.skipIf(!HAVE)('neuron-sync chokepoint', () => {
     // The credential flag must appear in REVIEW.md.
     expect(readFileSync(join(vault, 'REVIEW.md'), 'utf-8')).toContain('credential pattern');
   });
+
+  // -------------------------------------------------------------------
+  // Regression (found arming the real vault): with the pre-commit hook
+  // installed, the stamping step must NOT inject trust frontmatter into
+  // REVIEW.md. The generator writes it without frontmatter, so a stamped
+  // REVIEW.md oscillates against its generator — every sync staged a real
+  // diff the hook immediately reverted, producing tree-identical EMPTY
+  // commits on every run.
+  // -------------------------------------------------------------------
+  it('regression: hook + sync stay idempotent and REVIEW.md never gains frontmatter', () => {
+    const hookSrc = join(SCRIPTS, 'hooks', 'pre-commit');
+    mkdirSync(join(vault, 'scripts', 'hooks'), { recursive: true });
+    cpSync(hookSrc, join(vault, 'scripts/hooks/pre-commit'));
+    cpSync(hookSrc, join(vault, '.git/hooks/pre-commit'));
+    execSync('chmod +x .git/hooks/pre-commit', { cwd: vault });
+
+    writeFileSync(join(vault, 'wiki/concepts/n.md'), UNVERIFIED);
+    sh('bash scripts/neuron-sync.sh', vault);
+    const count1 = sh('git rev-list --count HEAD', vault).trim();
+    sh('bash scripts/neuron-sync.sh', vault);
+    expect(sh('git rev-list --count HEAD', vault).trim()).toBe(count1);
+    expect(readFileSync(join(vault, 'REVIEW.md'), 'utf-8').startsWith('# REVIEW')).toBe(true);
+  });
 });
