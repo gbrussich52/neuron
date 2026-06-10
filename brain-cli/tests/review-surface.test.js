@@ -97,6 +97,21 @@ describe('renderReview + writeReviewIfChanged (vector 13: idempotency)', () => {
     expect(idx[1]).toBeLessThan(idx[2]);
     expect(idx[2]).toBeLessThan(idx[3]);
   });
+  it('strips backticks from tree-walk slugs so a crafted filename cannot redirect an approval', () => {
+    // Backtick is legal on APFS. Unsanitized, `legit\`.md` renders as
+    // - [ ] `wiki/concepts/legit`.md` and parseCheckedSlugs truncates the
+    // inline-code span at the embedded backtick, capturing 'wiki/concepts/legit'
+    // — redirecting the approval toward a DIFFERENT note.
+    writeFileSync(join(vault, 'wiki/concepts/legit`.md'),
+      note({ classification: 'PRIVATE', trust: 'unverified', author: 'claude', source: 'session', captured_at: '2026-06-09' }));
+    writeFileSync(join(vault, 'wiki/concepts/legit.md'),
+      note({ classification: 'PRIVATE', trust: 'unverified', author: 'claude', source: 'session', captured_at: '2026-06-09' }));
+    writeReviewIfChanged(vault, CFG);
+    const rendered = readFileSync(join(vault, 'REVIEW.md'), 'utf-8');
+    // Check every box (covers the backtick-derived item regardless of sort order)
+    const checked = rendered.replace(/- \[ \]/g, '- [x]');
+    expect(parseCheckedSlugs(checked).approve).not.toContain('wiki/concepts/legit');
+  });
   it('neutralizes newline injection in flags.jsonl reasons (no phantom approvals)', () => {
     mkdirSync(join(vault, '.neuron'), { recursive: true });
     // A malicious reason tries to open a fake Clean section with a pre-checked box.

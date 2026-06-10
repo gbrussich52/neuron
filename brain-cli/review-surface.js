@@ -83,13 +83,17 @@ export function collectReviewItems(kbDir, config = {}) {
 
   for (const path of walkMarkdown(kbDir)) {
     const rel = relative(kbDir, path);
+    // Tree paths are untrusted too: a backtick is legal in an APFS filename and
+    // would truncate the rendered inline-code span, so parseCheckedSlugs could
+    // capture a prefix that names a DIFFERENT existing note (approval redirect).
+    const safeRel = sanitizeSlug(rel);
     let data;
     try {
       ({ data } = parseFrontmatter(readFileSync(path, 'utf-8')));
     } catch (err) {
       // Surface unreadable files instead of crashing the whole regen or
       // silently dropping them — fail-closed into the mechanical section.
-      mechanical.push({ slug: rel, reason: `unreadable: ${sanitizeReason(err.message)}` });
+      mechanical.push({ slug: safeRel, reason: `unreadable: ${sanitizeReason(err.message)}` });
       continue;
     }
     if (data.trust === 'rejected') continue; // terminal — no further action needed
@@ -99,7 +103,7 @@ export function collectReviewItems(kbDir, config = {}) {
       const pastTtl = !Number.isNaN(verifiedAt) && (now - verifiedAt) / DAY_MS > ttlDays;
       const pastReviewAfter = data.review_after && Date.parse(data.review_after) < now;
       if (data.needs_reverify === 'true' || pastTtl || pastReviewAfter) {
-        reverify.push({ slug: rel, reason: `verified_at ${data.verified_at || '?'}` });
+        reverify.push({ slug: safeRel, reason: `verified_at ${data.verified_at || '?'}` });
       }
       continue;
     }
@@ -110,9 +114,9 @@ export function collectReviewItems(kbDir, config = {}) {
     if (!data.source) fails.push('missing source');
     if (!data.trust) fails.push('missing trust (unswept write)');
     if (fails.length) {
-      mechanical.push({ slug: rel, reason: fails.join(', ') });
+      mechanical.push({ slug: safeRel, reason: fails.join(', ') });
     } else {
-      clean.push({ slug: rel, captured: data.captured_at || '' });
+      clean.push({ slug: safeRel, captured: data.captured_at || '' });
     }
   }
 
