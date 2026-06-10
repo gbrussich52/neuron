@@ -63,6 +63,22 @@ describe.skipIf(!HAVE)('pre-commit hook', () => {
     expect(committed).toContain('content_hash:');
   });
 
+  it('head-window boundary: classification on ~line 25 (within head -30) IS blocked', () => {
+    // The hook scans the first 30 lines for the classification key. Long
+    // frontmatter that pushes the key to line 25 must still be caught.
+    // Beyond line 30 the hook intentionally defers to the authoritative layer:
+    // neuron-sync's pre-push tree scan + the sweep's normalization pass.
+    const filler = Array.from({ length: 23 }, (_, i) => `meta_${i}: x`).join('\n');
+    writeFileSync(
+      join(vault, 'wiki/concepts/deep.md'),
+      `---\n${filler}\nclassification: CONFIDENTIAL\n---\n\n# Deep`
+    ); // classification lands on line 25
+    sh('git add wiki/concepts/deep.md', vault);
+    expect(() => sh('git commit -m deep', vault)).toThrow();
+    expect(sh('git diff --cached --name-only', vault)).not.toContain('deep.md');
+    expect(readFileSync(join(vault, '.gitignore'), 'utf-8')).toContain('wiki/concepts/deep.md');
+  });
+
   it('a mixed batch: safe file commits after re-run, CONFIDENTIAL stays out', () => {
     writeFileSync(join(vault, 'wiki/concepts/safe.md'), '# Safe\nbody');
     writeFileSync(join(vault, 'wiki/concepts/secret2.md'), '---\nclassification: CONFIDENTIAL\n---\n\n# S');
