@@ -1,173 +1,62 @@
 /**
- * review.js — Human approval queue for autonomous research output.
+ * review.js — `neuron review`: the REVIEW.md surface (spec Component 2).
+ * The old wiki/_review/ queue was retired in Plan 1; REVIEW.md (review-surface.js)
+ * is the single approval surface.
  *
- * Items in <vault>/wiki/_review/ are drafts produced by `neuron improve`.
- * They land here (never in wiki/ directly) until a human approves them.
- *
- * Exports:
- *   listPending(vaultRoot)              — pending items, oldest first
- *   approveItem(vaultRoot, name)        — move to target_path; remove from queue
- *   rejectItem(vaultRoot, name)         — move to Archive/ with rejected- prefix
- *   runReview(args, vaultRoot)          — CLI entrypoint (used by brain.js)
+ * Subcommands:
+ *   (none)        regenerate REVIEW.md + print the pending summary
+ *   apply         apply checked boxes (Clean → approve, Re-verify → reverify)
+ *   --age         also move unverified items idle past the window to Archive/_aged-review/
  */
-
-import { readFileSync, readdirSync, existsSync, renameSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { homedir } from 'os';
-import { timestamp } from './lib/util.js';
+import { collectReviewItems, writeReviewIfChanged, archiveAged, parseCheckedSlugs } from './review-surface.js';
+import { approve, reverify } from './trust-cli.js';
 
 function defaultVault() {
   return process.env.KB_DIR || join(homedir(), 'knowledge-base');
 }
 
-function reviewDir(vaultRoot) {
-  return join(vaultRoot, 'wiki', '_review');
-}
-
-/**
- * Parses YAML frontmatter from a markdown file's content.
- * Handles the limited subset Neuron uses: single-line `key: value` pairs.
- * Does NOT use a YAML library to keep the dependency footprint minimal.
- *
- * @param {string} content - Raw file content
- * @returns {Record<string, string>} - Parsed frontmatter key/value pairs
- */
-function parseFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return {};
-  const fm = {};
-  for (const line of match[1].split('\n')) {
-    const m = line.match(/^([a-zA-Z_]+):\s*(.+)$/);
-    if (m) fm[m[1]] = m[2].trim();
-  }
-  return fm;
-}
-
-/**
- * Returns all pending review items, sorted oldest-first by the `created`
- * frontmatter field. Ignores README.md and .gitkeep meta files.
- *
- * @param {string} [vaultRoot] - Vault root directory (defaults to KB_DIR env or ~/knowledge-base)
- * @returns {Array<{name: string, created: string, target_path: string, classification: string}>}
- */
-export function listPending(vaultRoot = defaultVault()) {
-  const dir = reviewDir(vaultRoot);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter(f => f.endsWith('.md') && f !== 'README.md')
-    .map(name => {
-      const content = readFileSync(join(dir, name), 'utf-8');
-      const fm = parseFrontmatter(content);
-      return {
-        name,
-        created: fm.created || '',
-        target_path: fm.target_path || '',
-        classification: fm.classification || '',
-      };
-    })
-    .sort((a, b) => (a.created || '').localeCompare(b.created || ''));
-}
-
-/**
- * Approves a review item by moving it to the path specified in its
- * `target_path` frontmatter field. Throws if the item is not found
- * or if `target_path` is absent from frontmatter.
- *
- * @param {string} vaultRoot - Vault root directory
- * @param {string} name - Filename within the _review/ queue
- * @returns {{ moved: true, target: string }}
- */
-export function approveItem(vaultRoot, name) {
-  const src = join(reviewDir(vaultRoot), name);
-  if (!existsSync(src)) throw new Error(`Item not found in review queue: ${name}`);
-  const content = readFileSync(src, 'utf-8');
-  const fm = parseFrontmatter(content);
-  if (!fm.target_path) {
-    throw new Error(`Cannot approve "${name}": frontmatter is missing target_path`);
-  }
-  const target = join(vaultRoot, fm.target_path);
-  mkdirSync(dirname(target), { recursive: true });
-  renameSync(src, target);
-  return { moved: true, target };
-}
-
-/**
- * Rejects a review item by moving it to Archive/ with a
- * `rejected-<timestamp>-<name>` prefix. Throws if the item is not found.
- *
- * @param {string} vaultRoot - Vault root directory
- * @param {string} name - Filename within the _review/ queue
- * @returns {{ archived: true, target: string }}
- */
-export function rejectItem(vaultRoot, name) {
-  const src = join(reviewDir(vaultRoot), name);
-  if (!existsSync(src)) throw new Error(`Item not found in review queue: ${name}`);
-  const archiveDir = join(vaultRoot, 'Archive');
-  mkdirSync(archiveDir, { recursive: true });
-  const target = join(archiveDir, `rejected-${timestamp()}-${name}`);
-  renameSync(src, target);
-  return { archived: true, target };
-}
-
-/**
- * CLI entrypoint for `neuron review`.
- * Subcommands: list (default), next, approve <n>, reject <n>.
- *
- * @param {string[]} args - CLI args after "review"
- * @param {string} [vaultRoot] - Vault root directory
- */
 export async function runReview(args, vaultRoot = defaultVault()) {
-  const sub = args[0];
-  const items = listPending(vaultRoot);
+  let config = {};
+  try {
+    const { loadConfig } = await import('./providers.js');
+    config = loadConfig();
+  } catch { /* temp vaults / missing config: defaults */ }
 
-  if (!sub || sub === 'list') {
-    if (items.length === 0) {
-      console.log('Review queue is empty.');
-      return;
+  if (args[0] === 'apply') {
+    const reviewPath = join(vaultRoot, 'REVIEW.md');
+    if (existsSync(reviewPath)) {
+      const { approve: toApprove, reverify: toReverify } = parseCheckedSlugs(readFileSync(reviewPath, 'utf-8'));
+      for (const slug of toApprove) {
+        try { approve(vaultRoot, slug); console.log(`Approved: ${slug}`); }
+        catch (e) { console.error(`approve ${slug}: ${e.message}`); }
+      }
+      for (const slug of toReverify) {
+        try { reverify(vaultRoot, slug); console.log(`Re-verified: ${slug}`); }
+        catch (e) { console.error(`reverify ${slug}: ${e.message}`); }
+      }
     }
-    console.log(`${items.length} pending:\n`);
-    items.forEach((it, i) => {
-      console.log(`  [${i + 1}] ${it.name}`);
-      console.log(`      created:     ${it.created}`);
-      console.log(`      target_path: ${it.target_path || '(none — cannot approve)'}`);
-    });
-    console.log('\nUsage: neuron review next | approve <n> | reject <n>');
-    return;
   }
 
-  if (sub === 'next') {
-    if (items.length === 0) { console.log('Review queue is empty.'); return; }
-    const item = items[0];
-    const content = readFileSync(join(reviewDir(vaultRoot), item.name), 'utf-8');
-    console.log(`=== ${item.name} ===\n`);
-    console.log(content);
-    return;
+  if (args.includes('--age')) {
+    for (const moved of archiveAged(vaultRoot, config)) console.log(`Aged out → Archive/_aged-review/: ${moved}`);
   }
 
-  if (sub === 'approve') {
-    const n = parseInt(args[1], 10);
-    if (!Number.isInteger(n) || n < 1 || n > items.length) {
-      console.error(`Usage: neuron review approve <n>   (1..${items.length})`);
-      return;
-    }
-    const item = items[n - 1];
-    const { target } = approveItem(vaultRoot, item.name);
-    console.log(`Approved → ${target}`);
-    return;
-  }
-
-  if (sub === 'reject') {
-    const n = parseInt(args[1], 10);
-    if (!Number.isInteger(n) || n < 1 || n > items.length) {
-      console.error(`Usage: neuron review reject <n>   (1..${items.length})`);
-      return;
-    }
-    const item = items[n - 1];
-    const { target } = rejectItem(vaultRoot, item.name);
-    console.log(`Rejected → ${target}`);
-    return;
-  }
-
-  console.error(`Unknown subcommand: ${sub}`);
-  console.error('Usage: neuron review [list|next|approve <n>|reject <n>]');
+  const { changed } = writeReviewIfChanged(vaultRoot, config);
+  const items = collectReviewItems(vaultRoot, config);
+  const pending = items.mechanical.length + items.softFlags.length + items.clean.length;
+  console.log(`REVIEW.md ${changed ? 'regenerated' : 'up to date'} — ${pending} pending, ${items.reverify.length} to re-verify`);
+  const show = (title, arr, fmt) => {
+    if (!arr.length) return;
+    console.log(`\n${title}`);
+    arr.forEach(i => console.log(fmt(i)));
+  };
+  show('Mechanical fails:', items.mechanical, i => `  ${i.slug} — ${i.reason}`);
+  show('Soft flags:', items.softFlags, i => `  ${i.slug} — ${i.reason}`);
+  show('Re-verify:', items.reverify, i => `  ${i.slug} — ${i.reason}`);
+  show('Clean (needs a yes):', items.clean, i => `  ${i.slug}`);
+  if (pending + items.reverify.length === 0) console.log('Nothing pending.');
+  else console.log('\nAct with: neuron approve|reject|reverify <slug>, or check boxes in REVIEW.md and run neuron review apply');
 }

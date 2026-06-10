@@ -23,6 +23,8 @@ import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { execFileSync } from 'child_process';
 import { timestamp, slugify } from './lib/util.js';
+import { computeContentHash } from './lib/contentHash.js';
+import { setField } from './lib/frontmatter.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const KB_DIR = process.env.KB_DIR || join(homedir(), 'knowledge-base');
@@ -195,9 +197,9 @@ async function executeSearches(queries, topic) {
  * @param {Object[]} allResults
  * @param {string[]} sourceFiles
  * @param {Object} [opts]
- * @param {boolean} [opts.routeToReview=false] - When true, write to wiki/_review/ with
- *   review-queue frontmatter instead of wiki/queries/. Used by the improvement loop so
- *   autonomously researched articles await human approval before entering the main wiki.
+ * @param {boolean} [opts.routeToReview=false] - When true, write to wiki/concepts/ born
+ *   trust: unverified (instead of wiki/queries/). Used by the improvement loop so
+ *   autonomously researched articles enter the trust ladder awaiting human approval.
  */
 async function synthesizeReport(topic, allResults, sourceFiles, opts = {}) {
   const { routeToReview = false } = opts;
@@ -239,34 +241,39 @@ Output only the report content (no frontmatter).`,
     maxTokens: 4000,
   });
 
-  // Determine output directory — review queue vs. regular wiki/queries/
-  const outDir = routeToReview
-    ? join(KB_DIR, 'wiki', '_review')
-    : join(WIKI_DIR, 'queries');
-  mkdirSync(outDir, { recursive: true });
+  // Determine output directory and filename.
+  // review-routed drafts land at their FINAL path (wiki/concepts/) born unverified,
+  // rather than the retired wiki/_review/ queue. Never overwrite an existing article.
+  let outDir, outFile;
+  if (routeToReview) {
+    outDir = join(KB_DIR, 'wiki', 'concepts');
+    mkdirSync(outDir, { recursive: true });
+    const candidatePath = join(outDir, `${topicSlug}.md`);
+    outFile = existsSync(candidatePath)
+      ? join(outDir, `${topicSlug}-update-${ts}.md`)
+      : candidatePath;
+  } else {
+    outDir = join(WIKI_DIR, 'queries');
+    mkdirSync(outDir, { recursive: true });
+    outFile = join(outDir, `${ts}_research_${topicSlug}.md`);
+  }
 
-  // Filename: review-routed drafts use the hyphenated pattern per the autonomy plan;
-  // the default path preserves the original `${ts}_research_${slug}.md` convention so
-  // downstream tooling and existing wiki history stay consistent.
-  const outFile = routeToReview
-    ? join(outDir, `${ts}-${topicSlug}.md`)
-    : join(outDir, `${ts}_research_${topicSlug}.md`);
-
-  // Build frontmatter — review-routed drafts get extra keys so the human
-  // approver knows where the article should land and what triggered it.
+  // Build frontmatter. review-routed drafts use the trust-ladder fields (trust:
+  // unverified); the non-review path stays byte-identical to the original.
   const frontmatter = routeToReview
     ? [
         '---',
         'classification: PRIVATE',
         'type: research-draft',
-        'status: pending-review',
+        'trust: unverified',
+        'author: nightly',
         'source: neuron-research',
+        `captured_at: ${new Date().toISOString().slice(0, 10)}`,
         `topic: "${topic}"`,
         `created: ${new Date().toISOString()}`,
-        `target_path: wiki/concepts/${topicSlug}.md`,
         `sources_count: ${allResults.reduce((sum, r) => sum + r.results.length, 0)}`,
         `search_steps: ${allResults.length}`,
-        `tags: [research, auto-generated, pending-review, ${topicSlug}]`,
+        `tags: [research, auto-generated, ${topicSlug}]`,
         '---',
       ]
     : [
@@ -281,7 +288,7 @@ Output only the report content (no frontmatter).`,
         '---',
       ];
 
-  const reportContent = [
+  let reportContent = [
     ...frontmatter,
     '',
     `# Research Report: ${topic}`,
@@ -292,6 +299,12 @@ Output only the report content (no frontmatter).`,
     ...sourceFiles.map(f => `- ${basename(f)}`),
     '',
   ].join('\n');
+
+  // Stamp content hash on review-routed drafts so trust-cli can bind approval
+  // to the exact body that was reviewed. Must happen after full content is assembled.
+  if (routeToReview) {
+    reportContent = setField(reportContent, 'content_hash', computeContentHash(reportContent));
+  }
 
   writeFileSync(outFile, reportContent);
   return outFile;
@@ -305,25 +318,32 @@ Output only the report content (no frontmatter).`,
  * @param {string} topic - Research topic.
  * @param {Object} [opts]
  * @param {boolean} [opts.routeToReview=false] - When true, the synthesis report is written
- *   to wiki/_review/ (human approval queue) instead of wiki/queries/. Pass this from the
- *   improvement loop; do NOT pass it from cmdResearch (human-invoked path).
+ *   to wiki/concepts/ born trust: unverified (instead of wiki/queries/). Pass this from
+ *   the improvement loop; do NOT pass it from cmdResearch (human-invoked path).
  */
 // ── Web Research (claude-native, no Tavily required) ──────────
 
 /**
  * Research a topic using claude's built-in WebSearch/WebFetch + Write tools.
  * Used by the improvement loop (when opts.routeToReview is true) so research
- * works without a TAVILY_API_KEY. Drafted article lands in wiki/_review/ for
- * human approval. Same execute-mode pattern as lint.sh/compile.sh:
+ * works without a TAVILY_API_KEY. Drafted article lands at its final path in
+ * wiki/concepts/ born trust: unverified (REVIEW.md is the approval surface).
+ * Same execute-mode pattern as lint.sh/compile.sh:
  * --permission-mode acceptEdits is required or claude silently no-ops Write.
  */
 async function runWebResearch(topic) {
   const slug = slugify(topic, 60);
-  const reviewDir = join(WIKI_DIR, '_review');
-  mkdirSync(reviewDir, { recursive: true });
-  const outFile = join(reviewDir, `${timestamp()}-${slug}.md`);
+  // Draft lands at its FINAL path in wiki/concepts/ born unverified; never writes
+  // to the retired wiki/_review/ queue. Never overwrite an existing article.
+  const conceptsDir = join(WIKI_DIR, 'concepts');
+  mkdirSync(conceptsDir, { recursive: true });
+  const ts = timestamp();
+  const candidatePath = join(conceptsDir, `${slug}.md`);
+  const outFile = existsSync(candidatePath)
+    ? join(conceptsDir, `${slug}-update-${ts}.md`)
+    : candidatePath;
   const isoNow = new Date().toISOString();
-  const targetPath = `wiki/concepts/${slug}.md`;
+  const isoDate = isoNow.slice(0, 10);
 
   const prompt = `Research this topic using your web tools and write a draft article.
 
@@ -339,11 +359,12 @@ The file MUST begin with EXACTLY this frontmatter, then a blank line, then the a
 
 ---
 classification: PRIVATE
-status: pending-review
+trust: unverified
 type: research-draft
+author: nightly
 source: neuron-research
+captured_at: ${isoDate}
 created: ${isoNow}
-target_path: ${targetPath}
 topic: "${topic.replace(/"/g, '\\"')}"
 ---
 
@@ -383,7 +404,7 @@ Rules:
   if (!existsSync(outFile)) {
     throw new Error(`Web research did not produce expected file: ${outFile}`);
   }
-  console.log(`  → ${basename(outFile)}`);
+  console.log(`  Draft → wiki/concepts/${basename(outFile)} (trust: unverified — approve via REVIEW.md)`);
   return { reportFile: outFile };
 }
 
@@ -398,13 +419,13 @@ export async function runResearch(topic, opts = {}) {
   }
 
   // Default path: use claude's built-in WebSearch/WebFetch/Write tools.
-  // Works without TAVILY_API_KEY. Routes to wiki/_review/ when invoked from the
-  // improvement loop, or to wiki/concepts/ when invoked directly by a human.
+  // Works without TAVILY_API_KEY. When routeToReview is true (improvement loop),
+  // the draft lands at its final path in wiki/concepts/ born trust: unverified.
   if (routeToReview || !process.env.TAVILY_API_KEY) {
     const result = await runWebResearch(topic);
     if (!routeToReview) {
       console.log(`  Article drafted: ${result.reportFile}`);
-      console.log(`  Edit/move with: neuron review approve 1   (after \`neuron review\`)`);
+      console.log(`  Approve via: neuron approve <slug>   or check box in REVIEW.md`);
     }
     return result;
   }

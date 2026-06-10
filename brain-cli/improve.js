@@ -108,8 +108,8 @@ async function runIteration(iterationNum, opts) {
     for (const gap of topGaps) {
       try {
         const { runResearch } = await import(join(__dirname, 'research.js'));
-        // routeToReview: true — improvement-loop research goes to wiki/_review/ (human
-        // approval queue) rather than directly into wiki/queries/ or wiki/concepts/.
+        // routeToReview: true — improvement-loop research lands at its final path in
+        // wiki/concepts/ born trust: unverified; REVIEW.md is the approval surface.
         await runResearch(gap, { routeToReview: true });
       } catch (e) {
         console.log(`    Research failed for "${gap}": ${e.message?.slice(0, 80)}`);
