@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Neuron pre-commit — fast local feedback (spec Component 3). NOT the
+# authoritative guard: that is neuron-sync's pre-push tree-state scan. This hook
+# is skippable (--no-verify) by design; the sweep + tree scan backstop it.
+# Exit 1 = commit blocked (CONFIDENTIAL was unstaged / secrets found) — re-run
+# the commit and the remaining safe files go through.
+set -uo pipefail
+
+KB_DIR="$(git rev-parse --show-toplevel)"
+NEURON_BIN="${NEURON_BIN:-neuron}"
+BLOCK=0
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$STAGED" ] && exit 0
+
+# Track files quarantined in step 1 so step 3 cannot re-add them.
+BLOCKED_FILES=""
+
+# --- 1. Frontmatter-keyed CONFIDENTIAL block + reclassification rule -----------
+# Case-insensitive grep: `classification: confidential` must not slip past the
+# fast gate (the sweep normalizes casing, but the hook may see pre-sweep files).
+while IFS= read -r f; do
+  case "$f" in *.md) ;; *) continue ;; esac
+  [ -f "$KB_DIR/$f" ] || continue
+  if head -20 "$KB_DIR/$f" | grep -qi '^classification:[[:space:]]*confidential'; then
+    echo "pre-commit BLOCK: $f is CONFIDENTIAL — unstaging + gitignoring." >&2
+    git restore --staged -- "$f" 2>/dev/null || git rm --cached --quiet -- "$f" || true
+    grep -qxF "$f" "$KB_DIR/.gitignore" 2>/dev/null || echo "$f" >> "$KB_DIR/.gitignore"
+    git add -- "$KB_DIR/.gitignore"
+    if git cat-file -e "HEAD:$f" 2>/dev/null; then
+      # Reclassification of an already-tracked file: untrack + warn about history.
+      git rm --cached --quiet -- "$f" || true
+      echo "WARNING: $f exists in git history. If this repo was ever pushed," >&2
+      echo "         rotate its contents and run git filter-repo." >&2
+    fi
+    BLOCKED_FILES="${BLOCKED_FILES}${f}"$'\n'
+    BLOCK=1
+  fi
+done <<< "$STAGED"
+
+# --- 2. Secret patterns on ALL staged file types (delegates regexes) -----------
+if [ -x "$KB_DIR/scripts/classify-check.sh" ]; then
+  if ! printf '%s\n' "$STAGED" | KB_DIR="$KB_DIR" "$KB_DIR/scripts/classify-check.sh" --secrets-stdin; then
+    echo "pre-commit BLOCK: credential pattern in staged files (see above)." >&2
+    BLOCK=1
+  fi
+fi
+
+# --- 3. Stamp trust/hash on staged .md, then re-stage --------------------------
+# NEURON_BIN may be "node /path/brain.js" — intentional word splitting below.
+if command -v "${NEURON_BIN%% *}" >/dev/null 2>&1; then
+  while IFS= read -r f; do
+    case "$f" in *.md) ;; *) continue ;; esac
+    [ -f "$KB_DIR/$f" ] || continue
+
+    # Skip files quarantined in step 1 — re-adding would undo the CONFIDENTIAL block.
+    # Also guard against any CONFIDENTIAL file that slipped through step 1 (e.g. mixed
+    # case that grep -qi already caught above, but be defensive here too).
+    if printf '%s\n' "$BLOCKED_FILES" | grep -qxF "$f"; then
+      continue
+    fi
+    if head -20 "$KB_DIR/$f" | grep -qi '^classification:[[:space:]]*confidential'; then
+      continue
+    fi
+
+    # shellcheck disable=SC2086
+    if KB_DIR="$KB_DIR" $NEURON_BIN validate "$f" --apply >/dev/null 2>&1; then
+      git add -- "$KB_DIR/$f"
+    fi
+  done <<< "$STAGED"
+else
+  echo "pre-commit WARN: neuron CLI not found — trust stamping skipped (sweep will backstop)." >&2
+fi
+
+if [ "$BLOCK" -eq 1 ]; then
+  echo "pre-commit: commit blocked. Offending files were excluded — re-run the commit for the safe files." >&2
+  exit 1
+fi
+exit 0

@@ -5,7 +5,40 @@
 
 set -euo pipefail
 
-KB_DIR="$HOME/knowledge-base"
+KB_DIR="${KB_DIR:-$HOME/knowledge-base}"
+PATTERNS=(
+  'sk-[a-zA-Z0-9]{20,}'      # API keys (OpenAI, Stripe, etc.) — min 20 chars to avoid false positives
+  'sk_live_'                   # Stripe live keys
+  'sk_test_'                   # Stripe test keys
+  'sbp_[a-zA-Z0-9]'          # Supabase keys
+  'eyJ[a-zA-Z0-9]'           # JWT tokens (base64 encoded)
+  'ghp_[a-zA-Z0-9]'          # GitHub personal access tokens
+  'gho_[a-zA-Z0-9]'          # GitHub OAuth tokens
+  'password\s*[:=]'           # Hardcoded passwords
+  'secret\s*[:=]'             # Hardcoded secrets
+  'SUPABASE_SERVICE_ROLE_KEY' # Supabase service role references with values
+)
+
+# --secrets-stdin: scan a newline-delimited file list from stdin (ANY extension,
+# paths relative to KB_DIR) against PATTERNS only. Used by the pre-commit hook
+# and neuron-sync's pre-push tree scan (spec Component 6: skills/scripts have no
+# frontmatter, so the secret pass must cover every file type).
+# Exit: 0 = clean, 2 = credential pattern found.
+if [[ "${1:-}" == "--secrets-stdin" ]]; then
+  LEAK=0
+  while IFS= read -r rel; do
+    [[ -f "$KB_DIR/$rel" ]] || continue
+    for pattern in "${PATTERNS[@]}"; do
+      if grep -qE "$pattern" "$KB_DIR/$rel" 2>/dev/null; then
+        echo "  CREDENTIAL PATTERN '$pattern' in: $rel"
+        LEAK=1
+      fi
+    done
+  done
+  [[ $LEAK -eq 1 ]] && exit 2
+  exit 0
+fi
+
 ISSUES=0
 CONFIDENTIAL_LEAK=0
 
@@ -28,21 +61,9 @@ done < <(find "$KB_DIR" -name "*.md" -not -path "*/.obsidian/*" -not -path "*/sc
 # Check 2: Scan for potential secrets/credentials in all files
 echo ""
 echo "Scanning for potential secrets..."
-PATTERNS=(
-  'sk-[a-zA-Z0-9]{20,}'      # API keys (OpenAI, Stripe, etc.) — min 20 chars to avoid false positives
-  'sk_live_'                   # Stripe live keys
-  'sk_test_'                   # Stripe test keys
-  'sbp_[a-zA-Z0-9]'          # Supabase keys
-  'eyJ[a-zA-Z0-9]'           # JWT tokens (base64 encoded)
-  'ghp_[a-zA-Z0-9]'          # GitHub personal access tokens
-  'gho_[a-zA-Z0-9]'          # GitHub OAuth tokens
-  'password\s*[:=]'           # Hardcoded passwords
-  'secret\s*[:=]'             # Hardcoded secrets
-  'SUPABASE_SERVICE_ROLE_KEY' # Supabase service role references with values
-)
 
 for pattern in "${PATTERNS[@]}"; do
-  matches=$(grep -rl "$pattern" "$KB_DIR" --include="*.md" 2>/dev/null | grep -v scripts/ || true)
+  matches=$(grep -rl "$pattern" "$KB_DIR" --include="*.md" 2>/dev/null | grep -v "scripts/" || true)
   if [[ -n "$matches" ]]; then
     echo "  CREDENTIAL PATTERN '$pattern' found in:"
     echo "$matches" | sed 's/^/    /'

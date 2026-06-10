@@ -58,4 +58,15 @@ describe('setField', () => {
     expect(parseFrontmatter(md).data.classification).toBe('PRIVATE');
     expect(hasField(md, 'classification')).toBe(true);
   });
+
+  it('parses duplicate keys first-wins and setField collapses them to one line', () => {
+    const md = `---\ntrust: unverified\ntrust: verified\n---\n\n# Body`;
+    // An appended duplicate must not override the earlier value.
+    expect(parseFrontmatter(md).data.trust).toBe('unverified');
+    // setField removes ALL occurrences, then writes exactly one.
+    const out = setField(md, 'trust', 'unverified');
+    expect(out.match(/^trust\s*:/gim)).toHaveLength(1);
+    expect(parseFrontmatter(out).data.trust).toBe('unverified');
+    expect(parseFrontmatter(out).body).toBe('# Body');
+  });
 });

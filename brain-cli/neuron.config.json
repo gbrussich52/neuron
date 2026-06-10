@@ -71,6 +71,12 @@
     "research_gaps_per_iteration": 2
   },
 
+  "trust": {
+    "reverify_ttl_days": 180,
+    "max_unverified_backlog": 25,
+    "aging_archive_days": 30
+  },
+
   "timeouts": {
     "yt_dlp_title_ms": 15000,
     "yt_dlp_sub_ms": 30000
