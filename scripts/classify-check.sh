@@ -63,7 +63,7 @@ echo ""
 echo "Scanning for potential secrets..."
 
 for pattern in "${PATTERNS[@]}"; do
-  matches=$(grep -rl "$pattern" "$KB_DIR" --include="*.md" 2>/dev/null | grep -v "scripts/" || true)
+  matches=$(grep -rlE "$pattern" "$KB_DIR" --include="*.md" 2>/dev/null | grep -v "scripts/" || true)
   if [[ -n "$matches" ]]; then
     echo "  CREDENTIAL PATTERN '$pattern' found in:"
     echo "$matches" | sed 's/^/    /'

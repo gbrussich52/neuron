@@ -1,5 +1,0 @@
----
-classification: CONFIDENTIAL
----
-
-# Also confidential

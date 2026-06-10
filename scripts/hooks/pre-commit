@@ -22,7 +22,7 @@ BLOCKED_FILES=""
 while IFS= read -r f; do
   case "$f" in *.md) ;; *) continue ;; esac
   [ -f "$KB_DIR/$f" ] || continue
-  if head -20 "$KB_DIR/$f" | grep -qi '^classification:[[:space:]]*confidential'; then
+  if head -30 "$KB_DIR/$f" | grep -qi '^classification:[[:space:]]*confidential'; then
     echo "pre-commit BLOCK: $f is CONFIDENTIAL — unstaging + gitignoring." >&2
     git restore --staged -- "$f" 2>/dev/null || git rm --cached --quiet -- "$f" || true
     grep -qxF "$f" "$KB_DIR/.gitignore" 2>/dev/null || echo "$f" >> "$KB_DIR/.gitignore"
@@ -48,9 +48,19 @@ fi
 
 # --- 3. Stamp trust/hash on staged .md, then re-stage --------------------------
 # NEURON_BIN may be "node /path/brain.js" — intentional word splitting below.
+# Limitation: the path to brain.js must not contain spaces; sweep backstops if
+# stamping is skipped.
 if command -v "${NEURON_BIN%% *}" >/dev/null 2>&1; then
   while IFS= read -r f; do
     case "$f" in *.md) ;; *) continue ;; esac
+    # Only stamp notes in the governed content dirs. Generated artifacts
+    # (REVIEW.md) and root docs (CLAUDE.md, README.md) must NEVER gain trust
+    # frontmatter — stamping REVIEW.md oscillates against its generator and
+    # produced empty commits on every sync.
+    case "$f" in
+      wiki/*|memory/*|raw/*|Research/*|Notes/*|Daily/*|UGC-Dual-Path/*|skills/*|docs/*) ;;
+      *) continue ;;
+    esac
     [ -f "$KB_DIR/$f" ] || continue
 
     # Skip files quarantined in step 1 — re-adding would undo the CONFIDENTIAL block.
@@ -59,7 +69,7 @@ if command -v "${NEURON_BIN%% *}" >/dev/null 2>&1; then
     if printf '%s\n' "$BLOCKED_FILES" | grep -qxF "$f"; then
       continue
     fi
-    if head -20 "$KB_DIR/$f" | grep -qi '^classification:[[:space:]]*confidential'; then
+    if head -30 "$KB_DIR/$f" | grep -qi '^classification:[[:space:]]*confidential'; then
       continue
     fi
 
