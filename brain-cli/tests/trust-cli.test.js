@@ -6,6 +6,7 @@ import { approve, reject, reverify } from '../trust-cli.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { computeContentHash } from '../lib/contentHash.js';
 import { readEntries } from '../lib/approvals.js';
+import { filterTrusted } from '../semantic.js';
 
 let vault;
 const DRAFT = '---\nclassification: PRIVATE\ntrust: unverified\nauthor: nightly\nsource: neuron-research\ncaptured_at: 2026-06-09\n---\n\n# Draft\nDraft body.';
@@ -34,6 +35,27 @@ describe('approve (vector 6)', () => {
       '---\nclassification: PRIVATE\ntrust: unverified\nauthor: claude\ncaptured_at: 2026-06-09\n---\n\n# N\nbody');
     approve(vault, 'nosrc', 'giani');
     expect(parseFrontmatter(readFileSync(join(vault, 'wiki/concepts/nosrc.md'), 'utf-8')).data.source).toBe('manual');
+  });
+});
+
+describe('approve edge cases', () => {
+  it('approving an already-verified note is idempotent (no throw, stays verified, re-binds hash in a second log entry)', () => {
+    approve(vault, 'draft', 'giani');
+    expect(() => approve(vault, 'draft', 'giani')).not.toThrow();
+    const { data } = parseFrontmatter(readFileSync(join(vault, 'wiki/concepts/draft.md'), 'utf-8'));
+    expect(data.trust).toBe('verified');
+    const entries = readEntries(vault).filter(e => e.action === 'approve' && e.slug === 'wiki/concepts/draft.md');
+    expect(entries).toHaveLength(2);
+  });
+  it('approving a CONFIDENTIAL note succeeds — filterTrusted remains the leak gate', () => {
+    writeFileSync(join(vault, 'wiki/concepts/secret.md'),
+      '---\nclassification: CONFIDENTIAL\ntrust: unverified\nauthor: claude\nsource: manual\ncaptured_at: 2026-06-09\n---\n\n# S\nsecret body');
+    approve(vault, 'secret', 'giani');
+    const { data } = parseFrontmatter(readFileSync(join(vault, 'wiki/concepts/secret.md'), 'utf-8'));
+    expect(data.trust).toBe('verified');
+    // Verification does NOT make it servable: the read-side filter still
+    // excludes CONFIDENTIAL regardless of trust — that gate is the leak control.
+    expect(filterTrusted([{ classification: 'CONFIDENTIAL', trust: 'verified' }])).toEqual([]);
   });
 });
 

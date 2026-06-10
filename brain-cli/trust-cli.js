@@ -135,7 +135,9 @@ export async function runTrustCommand(action, args, kbDir = defaultVault()) {
     return;
   }
   try {
-    const result = { approve, reject, reverify }[action](kbDir, slug);
+    // await is a no-op today (handlers are sync) but future-proofs the dispatch
+    // if any handler grows an async step (e.g. remote log append).
+    const result = await { approve, reject, reverify }[action](kbDir, slug);
     console.log(`${VERBS[action]}: ${result.slug}`);
   } catch (e) {
     console.error(e.message);

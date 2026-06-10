@@ -78,10 +78,12 @@ export function validateFile(content, { author, relPath = '', kbDir = null } = {
 
   const hash = computeContentHash(out);
   const data = parseFrontmatter(out).data; // re-parsed: normalized casing/dedupe applied
+  let hashMismatched = false; // tracks the mismatch branch — gates crash recovery below
   if (!data.content_hash) {
     out = setField(out, 'content_hash', hash); // metadata-only: trust unchanged
     changes.push('content_hash: stamped');
   } else if (data.content_hash !== hash) {
+    hashMismatched = true;
     out = setField(out, 'content_hash', hash);
     if (data.trust === 'rejected') {
       changes.push('content_hash: restamped (rejected is terminal)');
@@ -101,6 +103,25 @@ export function validateFile(content, { author, relPath = '', kbDir = null } = {
       } else {
         changes.push('content_hash: updated');
       }
+    }
+  }
+
+  // Crash recovery: a reject logged for THIS EXACT content (hash match) means a
+  // reject was interrupted before the archive step — re-apply it. A differing
+  // hash means new content at the same path (e.g. a regenerated draft): leave
+  // it unverified for normal review, never kill new content with an old reject.
+  // Gated to the non-mismatch paths (missing-hash freshly stamped, or equal):
+  // an interrupted reject never alters the source file, so its hash field is
+  // either absent or matching — the mismatch branch already has its own rules.
+  if (!hashMismatched && kbDir && relPath &&
+      parseFrontmatter(out).data.trust === 'unverified') {
+    const rejection = latestFor(kbDir, relPath, 'reject');
+    const approvalAfter = latestFor(kbDir, relPath, 'approve');
+    if (rejection && rejection.content_hash === hash &&
+        (!approvalAfter || approvalAfter.ts <= rejection.ts)) {
+      out = setField(out, 'trust', 'rejected');
+      out = setField(out, 'rejected_at', rejection.ts.slice(0, 10));
+      changes.push('trust: rejected (re-applied interrupted reject from log)');
     }
   }
   return { content: out, changes };

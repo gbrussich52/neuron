@@ -104,6 +104,28 @@ describe('adversarial: trust-bypass vectors', () => {
   });
 });
 
+describe('interrupted-reject recovery', () => {
+  it('re-applies a logged reject whose hash matches the current content', () => {
+    // Simulates a reject that died after appendEntry but before the archive
+    // move: the file sits at its path, unverified, body unchanged.
+    const note = '---\nclassification: PRIVATE\ntrust: unverified\nauthor: claude\nsource: session\ncaptured_at: 2026-06-09\n---\n\n# Note\nrejected body';
+    appendEntry(vault, { action: 'reject', slug: 'wiki/concepts/ir.md', content_hash: computeContentHash(note), approver: 'giani' });
+    const { content, changes } = validateFile(note, { relPath: 'wiki/concepts/ir.md', kbDir: vault });
+    const { data } = parseFrontmatter(content);
+    expect(data.trust).toBe('rejected');
+    expect(data.rejected_at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(changes.join(' ')).toMatch(/re-applied interrupted reject/);
+  });
+  it('leaves NEW content at the same path unverified when the logged reject hash differs', () => {
+    // A regenerated draft at a previously rejected path must enter normal
+    // review — an old reject must never kill content it never covered.
+    const note = '---\nclassification: PRIVATE\ntrust: unverified\nauthor: claude\nsource: session\ncaptured_at: 2026-06-09\n---\n\n# Note\nbrand new body';
+    appendEntry(vault, { action: 'reject', slug: 'wiki/concepts/nc.md', content_hash: 'hash-of-the-old-content', approver: 'giani' });
+    const { content } = validateFile(note, { relPath: 'wiki/concepts/nc.md', kbDir: vault });
+    expect(parseFrontmatter(content).data.trust).toBe('unverified');
+  });
+});
+
 describe('runSweep', () => {
   it('dry-run reports but does not write; --apply writes; second sweep is a no-op', () => {
     const f = join(vault, 'wiki/concepts/new.md');
