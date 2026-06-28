@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.giani.neuron-rollup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/gianibrussich/.nvm/versions/node/v24.6.0/bin/node</string>
+        <string>/Users/gianibrussich/project-claude/llm-knowledge-base/brain-cli/brain.js</string>
+        <string>rollup</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/gianibrussich/knowledge-base/logs/neuron-rollup.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/gianibrussich/knowledge-base/logs/neuron-rollup.err.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/gianibrussich/.bun/bin:/Users/gianibrussich/.local/bin:/Users/gianibrussich/.nvm/versions/node/v24.6.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/gianibrussich</string>
+        <key>KB_DIR</key>
+        <string>/Users/gianibrussich/knowledge-base</string>
+        <key>NEURON_MEMORY_INDEX</key>
+        <string>/Users/gianibrussich/.claude/projects/-Users-gianibrussich-project-claude/memory/MEMORY.md</string>
+    </dict>
+</dict>
+</plist>
