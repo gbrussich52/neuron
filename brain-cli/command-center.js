@@ -3,7 +3,8 @@ import { join } from 'path';
 import { readProjectNodes } from './projects.js';
 
 export function buildCommandCenter(kbDir) {
-  const nodes = readProjectNodes(kbDir);
+  const nodes = readProjectNodes(kbDir)
+    .filter(n => String(n.data.classification || 'PRIVATE').toUpperCase() !== 'CONFIDENTIAL');
   const rows = nodes.map(n => {
     const d = n.data;
     return `| [[${n.slug}]] | ${d.status || ''} | ${d.next_action || ''} | ${d.blocker || ''} | ${d.last_touched || ''} |`;
