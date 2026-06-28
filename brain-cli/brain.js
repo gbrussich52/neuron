@@ -32,6 +32,7 @@ import { createInterface } from 'readline';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { timestamp, slugify } from './lib/util.js';
+import { captureNote } from './capture.js';
 
 // Provider abstraction — routes LLM calls through configured backend
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -314,6 +315,15 @@ function cmdBraindump() {
     log(`Brain dump saved: ${basename(outFile)}`);
     log('Run `brain process` or `brain watch` to auto-process.');
   });
+}
+
+async function cmdCapture(args) {
+  const text = args.join(' ').trim();
+  if (!text) { console.error('usage: neuron capture "<your idea>"'); process.exit(1); }
+  const { file, links } = await captureNote(text, { source: 'terminal' });
+  const linkStr = links.length ? links.map(t => `[[${t}]]`).join(' ') : '(no links yet)';
+  console.log(`✓ captured → ${linkStr}`);
+  console.log(`  ${file}`);
 }
 
 function cmdSearch(query) {
@@ -631,6 +641,7 @@ const [,, command, ...args] = process.argv;
       case 'watch': cmdWatch(); break;
       case 'process': cmdProcess(); break;
       case 'braindump': case 'dump': cmdBraindump(); break;
+      case 'capture': await cmdCapture(args); break;
       case 'search': cmdSearch(args.join(' ')); break;
       case 'semantic-search': await cmdSemanticSearch(args.join(' ')); break;
       case 'smart-search': await cmdSmartSearch(args.join(' ')); break;
