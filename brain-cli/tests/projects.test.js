@@ -30,3 +30,16 @@ it('reads project nodes sorted by last_touched desc', () => {
   expect(nodes.map(n => n.slug)).toEqual(['new', 'old']);
   expect(nodes[0].data.status).toBe('active');
 });
+
+it('round-trips links: as an array of slugs (not empty string)', () => {
+  writeProjectNode(kb, { slug: 'a', title: 'A', status: 'active', next_action: 'x', last_touched: '2026-06-28', links: ['b-node', 'c-node'] });
+  const [node] = readProjectNodes(kb).filter(n => n.slug === 'a');
+  expect(Array.isArray(node.data.links)).toBe(true);
+  expect(node.data.links).toEqual(['b-node', 'c-node']);
+});
+
+it('returns empty array for a node with no links', () => {
+  writeProjectNode(kb, { slug: 'd', title: 'D', status: 'active', next_action: 'x', last_touched: '2026-06-28' });
+  const [node] = readProjectNodes(kb).filter(n => n.slug === 'd');
+  expect(node.data.links).toEqual([]);
+});
