@@ -33,6 +33,7 @@ import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { timestamp, slugify } from './lib/util.js';
 import { captureNote } from './capture.js';
+import { runRollup } from './rollup.js';
 
 // Provider abstraction — routes LLM calls through configured backend
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -631,6 +632,15 @@ async function cmdReview(args) {
   await runReview(args);
 }
 
+function cmdRollup() {
+  const kbDir = KB_DIR;
+  const indexPath = process.env.NEURON_MEMORY_INDEX
+    || join(process.env.HOME, '.claude/projects/-Users-gianibrussich-project-claude/memory/MEMORY.md');
+  const r = runRollup({ kbDir, indexPath });
+  console.log(`✓ rollup: ${r.commandCenter}`);
+  console.log(`✓ rollup: ${r.memoryIndex}`);
+}
+
 // ── CLI Router ─────────────────────────────────────────────────
 const [,, command, ...args] = process.argv;
 
@@ -666,6 +676,7 @@ const [,, command, ...args] = process.argv;
       }
       case 'config': cmdConfig(args); break;
       case 'status': cmdStatus(); break;
+      case 'rollup': cmdRollup(); break;
       case 'daily': await cmdDaily(); break;
       case 'insights': await cmdInsights(); break;
       default:
