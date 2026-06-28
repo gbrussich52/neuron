@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync } from 'fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { writeProjectNode } from '../projects.js';
@@ -19,4 +19,14 @@ it('builds a Command-Center.md table linking each project, sorted by last_touche
   // Most-recently-touched project appears first
   expect(md.indexOf('[[sb]]')).toBeLessThan(md.indexOf('[[pap]]'));
   expect(md).toContain('endpapers');
+});
+
+it('excludes CONFIDENTIAL nodes (case-insensitive) from the dashboard', () => {
+  const f = writeProjectNode(kb, { slug: 'secret', title: 'Secret', status: 'active', next_action: 'x', last_touched: '2026-06-28' });
+  // flip to lowercase confidential to prove case-insensitivity
+  writeFileSync(f, readFileSync(f, 'utf8').replace('classification: PRIVATE', 'classification: confidential'));
+  writeProjectNode(kb, { slug: 'shown', title: 'Shown', status: 'active', next_action: 'y', last_touched: '2026-06-28' });
+  const md = readFileSync(buildCommandCenter(kb), 'utf8');
+  expect(md).not.toContain('[[secret]]');
+  expect(md).toContain('[[shown]]');
 });
