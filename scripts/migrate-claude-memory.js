@@ -1,10 +1,8 @@
 import { readdirSync, readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { parseFrontmatter } from '../brain-cli/lib/frontmatter.js';
 import { writeProjectNode } from '../brain-cli/projects.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function migrateMemory(srcDir, kbDir) {
   const migrated = [], skipped = [];

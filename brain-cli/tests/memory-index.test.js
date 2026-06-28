@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -26,4 +26,13 @@ it('never lists a CONFIDENTIAL project', () => {
   writeFileSync(f, readFileSync(f, 'utf8').replace('classification: PRIVATE', 'classification: CONFIDENTIAL'));
   buildMemoryIndex(kb, idx);
   expect(readFileSync(idx, 'utf8')).not.toContain('secret');
+});
+
+it('never lists a confidential project (lowercase)', () => {
+  const f = writeProjectNode(kb, { slug: 'hidden', title: 'Hidden', status: 'active', next_action: 'x', last_touched: '2026-06-22' });
+  writeFileSync(f, readFileSync(f, 'utf8').replace('classification: PRIVATE', 'classification: confidential'));
+  buildMemoryIndex(kb, idx);
+  const md = readFileSync(idx, 'utf8');
+  expect(md).not.toContain('hidden');
+  expect(md).not.toContain('Hidden');
 });

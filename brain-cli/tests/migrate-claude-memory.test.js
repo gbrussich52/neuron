@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -34,4 +34,14 @@ it('skips CONFIDENTIAL files', () => {
   const res = migrateMemory(src, kb);
   expect(res.skipped).toContain('secret');
   expect(existsSync(join(kb, 'Projects', 'secret.md'))).toBe(false);
+});
+
+it('skips confidential files (lowercase)', () => {
+  writeFileSync(
+    join(src, 'project_hidden.md'),
+    `---\nclassification: confidential\n---\n\nhidden`
+  );
+  const res = migrateMemory(src, kb);
+  expect(res.skipped).toContain('hidden');
+  expect(existsSync(join(kb, 'Projects', 'hidden.md'))).toBe(false);
 });
