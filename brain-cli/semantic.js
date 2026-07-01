@@ -222,6 +222,34 @@ function cosineSimilarity(a, b) {
   return dot / (Math.sqrt(magA) * Math.sqrt(magB));
 }
 
+// ── Shared Scoring ────────────────────────────────────────────
+
+/**
+ * Score every trusted chunk in the index against a query embedding and
+ * return the top K, sorted descending by score.
+ *
+ * Extracted from search()/searchQuiet()/smartSearch(), which each used to
+ * duplicate this exact scan-score-sort-slice sequence independently. Keeping
+ * one implementation means a future fix to scoring/filtering logic only has
+ * to be made once.
+ *
+ * @param {Array} chunks - index.chunks
+ * @param {number[]} queryEmbedding
+ * @param {number} topK
+ * @returns {Array<{score: number, heading: string, text: string, file: string}>}
+ */
+function scoreChunks(chunks, queryEmbedding, topK) {
+  const scored = filterTrusted(chunks).map(chunk => ({
+    score: cosineSimilarity(queryEmbedding, chunk.embedding),
+    heading: chunk.heading,
+    text: chunk.text,
+    file: chunk.file,
+  }));
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, topK);
+}
+
 // ── Batch Embedding ───────────────────────────────────────────
 
 /**
@@ -385,16 +413,7 @@ export async function search(query, topK = 5) {
   const [queryEmbedding] = await embed(query);
 
   // Score all chunks (fail-closed: verified only, never CONFIDENTIAL)
-  const scored = filterTrusted(index.chunks).map(chunk => ({
-    score: cosineSimilarity(queryEmbedding, chunk.embedding),
-    heading: chunk.heading,
-    text: chunk.text,
-    file: chunk.file,
-  }));
-
-  // Sort by score, return top K
-  scored.sort((a, b) => b.score - a.score);
-  const results = scored.slice(0, topK);
+  const results = scoreChunks(index.chunks, queryEmbedding, topK);
 
   // Display results
   for (const [i, r] of results.entries()) {
@@ -419,15 +438,7 @@ export async function searchQuiet(query, topK = 5) {
   const [queryEmbedding] = await embed(query);
 
   // Fail-closed: verified only, never CONFIDENTIAL
-  const scored = filterTrusted(index.chunks).map(chunk => ({
-    score: cosineSimilarity(queryEmbedding, chunk.embedding),
-    heading: chunk.heading,
-    text: chunk.text,
-    file: chunk.file,
-  }));
-
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, topK);
+  return scoreChunks(index.chunks, queryEmbedding, topK);
 }
 
 /**
@@ -459,15 +470,7 @@ export async function smartSearch(query, topK = 8) {
     try {
       const [queryEmbedding] = await embed(query);
       // Fail-closed: verified only, never CONFIDENTIAL
-      const semanticResults = filterTrusted(index.chunks)
-        .map(chunk => ({
-          score: cosineSimilarity(queryEmbedding, chunk.embedding),
-          heading: chunk.heading,
-          text: chunk.text,
-          file: chunk.file,
-        }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, topK);
+      const semanticResults = scoreChunks(index.chunks, queryEmbedding, topK);
 
       for (const r of semanticResults) {
         if (r.score < 0.25) continue;
