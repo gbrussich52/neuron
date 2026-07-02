@@ -23,11 +23,12 @@ const { computeMetrics, getGrade, takeSnapshot } = await import(join(__dirname, 
 
 // ── Argument Parsing ──────────────────────────────────────────
 
-function parseImproveArgs(args) {
+export function parseImproveArgs(args) {
   const opts = {
     maxIterations: null,  // null = use config default
     targetGrade: null,    // null = use config default
     dryRun: false,
+    maxResearchCalls: null, // null = use config default (hard ceiling on total research() calls this run)
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -41,12 +42,29 @@ function parseImproveArgs(args) {
       case '--dry-run':
         opts.dryRun = true;
         break;
+      case '--max-research-calls': {
+        const parsed = parseInt(args[++i], 10);
+        // Guard against a garbage value (e.g. "not-a-number") producing NaN,
+        // which would silently propagate as an unbounded/broken budget.
+        opts.maxResearchCalls = Number.isNaN(parsed) ? null : parsed;
+        break;
+      }
     }
   }
 
   const config = loadConfig();
   opts.maxIterations = opts.maxIterations || config.improve?.max_iterations || 5;
   opts.targetGrade = opts.targetGrade || config.improve?.target_grade || 'B';
+
+  const gapsToResearch = config.improve?.research_gaps_per_iteration || 2;
+  // Cost ceiling: each research() call is a full research+synthesis pipeline (or a
+  // 20-minute web-research shell-out when no Tavily key is set). Without a hard cap,
+  // maxIterations x gapsToResearch calls can fan out silently. Default cap matches
+  // the uncapped worst case (no behavior change unless the operator lowers it).
+  // Use ?? (not ||) so an explicit 0 (hard stop) is honored instead of falling
+  // through to the config/computed default, which || would silently do since 0 is falsy.
+  opts.maxResearchCalls =
+    opts.maxResearchCalls ?? config.improve?.max_research_calls ?? (opts.maxIterations * gapsToResearch);
 
   return opts;
 }
@@ -57,6 +75,9 @@ function parseImproveArgs(args) {
  * Run a single improvement iteration:
  *   compile → lint → check gaps → research top gaps → metrics snapshot
  *
+ * @param {number} iterationNum
+ * @param {Object} opts - includes researchBudget: { used: number, cap: number } shared
+ *   across the whole runImprove() invocation to enforce the global cost ceiling.
  * @returns {{ grade: string, score: number, gaps: string[], improved: boolean }}
  */
 async function runIteration(iterationNum, opts) {
@@ -106,6 +127,17 @@ async function runIteration(iterationNum, opts) {
     console.log(`  [4/5] Researching top ${topGaps.length} gap(s)...`);
 
     for (const gap of topGaps) {
+      // Hard cost ceiling: stop firing research() calls once the run-wide budget
+      // is exhausted, instead of fanning out unboundedly (finding #7).
+      if (opts.researchBudget.used >= opts.researchBudget.cap) {
+        console.log(
+          `    Skipping "${gap}" — research call budget exhausted ` +
+          `(${opts.researchBudget.used}/${opts.researchBudget.cap}). ` +
+          `Raise with --max-research-calls if intentional.`
+        );
+        continue;
+      }
+      opts.researchBudget.used++;
       try {
         const { runResearch } = await import(join(__dirname, 'research.js'));
         // routeToReview: true — improvement-loop research lands at its final path in
@@ -184,6 +216,15 @@ async function runStandalone(opts) {
   console.log(`  Max iterations: ${opts.maxIterations}`);
   console.log(`  Target grade: ${opts.targetGrade}`);
   console.log(`  Dry run: ${opts.dryRun}`);
+  console.log(
+    `  Research call budget (cost ceiling): up to ${opts.maxResearchCalls} ` +
+    `synthesize-tier research call(s) this run — each is a full research+synthesis ` +
+    `pipeline (or a ~20min web-research shell-out without TAVILY_API_KEY). ` +
+    `Override with --max-research-calls.`
+  );
+
+  // Shared across all iterations so the cap applies to the whole run, not per-iteration.
+  opts.researchBudget = { used: 0, cap: opts.maxResearchCalls };
 
   // Take initial snapshot
   const initialMetrics = computeMetrics();

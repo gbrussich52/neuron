@@ -24,6 +24,12 @@ const CONFIG_PATH = join(__dirname, 'neuron.config.json');
 // ── Config Loading ────────────────────────────────────────────
 
 let _config = null;
+let _warnedMaxTokensIgnored = false; // dedupe the claude-cli maxTokens warning per process
+
+/** Test-only helper: reset the once-per-process maxTokens warning dedupe flag. */
+export function __resetMaxTokensWarning() {
+  _warnedMaxTokensIgnored = false;
+}
 
 export function loadConfig() {
   if (!_config) {
@@ -98,8 +104,14 @@ export async function withRetry(fn, opts = {}) {
 /**
  * claude-cli provider: shells out to `claude --print`
  * This is the null migration — exact same behavior as before.
+ *
+ * NOTE (cost control): the `claude` CLI has no `--max-tokens` flag, so
+ * `maxTokens` CANNOT be enforced for this provider — it only bounds output
+ * for anthropic-api/openai-compatible. We warn on stderr whenever a caller
+ * requests a non-default cap here so this limitation is visible instead of
+ * silent, per the project's cost-first engineering priority.
  */
-function claudeCliCall({ prompt, tools, model, maxTokens, timeout }) {
+export function claudeCliCall({ prompt, tools, model, maxTokens, timeout }) {
   const args = ['--print', prompt];
 
   if (tools && tools.length > 0) {
@@ -107,6 +119,15 @@ function claudeCliCall({ prompt, tools, model, maxTokens, timeout }) {
   }
   if (model) {
     args.push('--model', model);
+  }
+  if (maxTokens && !_warnedMaxTokensIgnored) {
+    _warnedMaxTokensIgnored = true;
+    console.warn(
+      `[neuron] Warning: maxTokens is set but the claude-cli provider has no ` +
+      `--max-tokens flag and cannot enforce it. Output length is unbounded on ` +
+      `this provider — switch to anthropic-api or openai-compatible if a hard ` +
+      `cap is required. (This warning is logged once per process.)`
+    );
   }
 
   const opts = {

@@ -44,34 +44,46 @@ export function validateFile(content, { author, relPath = '', kbDir = null } = {
     out = setField(out, 'captured_at', date);
     changes.push(`captured_at: ${date}`);
   }
+  // Single parse point for this middle section: thread `d` through the trust/casing/
+  // dedupe steps below instead of re-parsing frontmatter after every setField call
+  // (each parse walks the whole frontmatter block; this used to happen ~6x per file).
+  let d = parseFrontmatter(out).data;
+
   if (!hasField(out, 'trust')) {
     // Born verified ONLY for the user's own writes; everything else quarantines.
-    const a = parseFrontmatter(out).data.author;
-    const trust = a === 'giani' ? 'verified' : 'unverified';
+    const trust = d.author === 'giani' ? 'verified' : 'unverified';
     out = setField(out, 'trust', trust);
-    if (trust === 'verified') out = setField(out, 'verified_at', date);
+    d = { ...d, trust };
+    if (trust === 'verified') {
+      out = setField(out, 'verified_at', date);
+      d = { ...d, verified_at: date };
+    }
     changes.push(`trust: ${trust}`);
   }
 
   // Normalize semantic field casing — `Trust: Verified` or `classification: confidential`
   // must not dodge the trust rules or the read-side CONFIDENTIAL checks (=== comparisons).
-  let d = parseFrontmatter(out).data;
   if (d.trust && d.trust !== d.trust.toLowerCase()) {
-    out = setField(out, 'trust', d.trust.toLowerCase());
-    changes.push(`trust: normalized casing (${d.trust})`);
+    const original = d.trust;
+    d = { ...d, trust: original.toLowerCase() };
+    out = setField(out, 'trust', d.trust);
+    changes.push(`trust: normalized casing (${original})`);
   }
   if (d.classification && d.classification !== d.classification.toUpperCase()) {
-    out = setField(out, 'classification', d.classification.toUpperCase());
-    changes.push(`classification: normalized casing (${d.classification})`);
+    const original = d.classification;
+    d = { ...d, classification: original.toUpperCase() };
+    out = setField(out, 'classification', d.classification);
+    changes.push(`classification: normalized casing (${original})`);
   }
   // Collapse duplicate semantic keys — parse is first-wins, but the smuggled
   // second line must not survive on disk (setField rewrites to exactly one line
-  // carrying the first-wins value).
+  // carrying the first-wins value). Duplicate-line counting must read the raw
+  // frontmatter text (not `d`), since `d` only tracks the first-wins semantic value.
   for (const key of ['trust', 'classification']) {
     const keyRe = new RegExp(`^${key}\\s*:`, 'i');
     const count = parseFrontmatter(out).raw.split('\n').filter(l => keyRe.test(l)).length;
     if (count > 1) {
-      out = setField(out, key, parseFrontmatter(out).data[key]);
+      out = setField(out, key, d[key]);
       changes.push(`${key}: collapsed ${count} duplicate keys`);
     }
   }

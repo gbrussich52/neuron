@@ -19,6 +19,39 @@ if [[ -z "$SOURCE" ]]; then
   exit 1
 fi
 
+# ── SSRF Guard ───────────────────────────────────────────────────
+# Blocks localhost/link-local/private/cloud-metadata targets before any curl/
+# firecrawl call touches a user-supplied URL. Currently ingest.sh is only
+# reachable from the trusted local CLI, but this keeps it safe if a remote
+# trigger (e.g. Discord) is ever wired to it.
+validate_url_host() {
+  local url="$1"
+  local host
+  host=$(echo "$url" | sed -E 's#^https?://##; s#[/:?#].*$##')
+
+  case "$host" in
+    localhost|localhost.*|*.localhost) echo "Blocked: '$host' resolves to localhost" >&2; exit 1 ;;
+    169.254.169.254|169.254.*)         echo "Blocked: '$host' is a link-local/cloud-metadata address" >&2; exit 1 ;;
+    127.*)                             echo "Blocked: '$host' is a loopback address" >&2; exit 1 ;;
+    0.0.0.0|::1|\[::1\])               echo "Blocked: '$host' is a loopback/wildcard address" >&2; exit 1 ;;
+    10.*)                              echo "Blocked: '$host' is a private (RFC1918) address" >&2; exit 1 ;;
+    192.168.*)                         echo "Blocked: '$host' is a private (RFC1918) address" >&2; exit 1 ;;
+  esac
+
+  # 172.16.0.0/12 private range needs numeric octet comparison
+  if [[ "$host" =~ ^172\.([0-9]{1,3})\. ]]; then
+    local second_octet="${BASH_REMATCH[1]}"
+    if [[ "$second_octet" -ge 16 && "$second_octet" -le 31 ]]; then
+      echo "Blocked: '$host' is a private (RFC1918) address" >&2
+      exit 1
+    fi
+  fi
+}
+
+if [[ "$SOURCE" =~ ^https?:// ]]; then
+  validate_url_host "$SOURCE"
+fi
+
 # Check for duplicate sources
 if grep -rl "source_url: $SOURCE\|source_file: $SOURCE" "$RAW_DIR"/ 2>/dev/null | head -1 | grep -q .; then
   EXISTING=$(grep -rl "source_url: $SOURCE\|source_file: $SOURCE" "$RAW_DIR"/ 2>/dev/null | head -1)

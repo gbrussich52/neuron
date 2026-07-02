@@ -1,8 +1,22 @@
 # Neuron — Vault Rules
 
-This is the knowledge base vault. All LLM agents (compile, lint, consolidate, insights, daily) must follow these rules.
+This repo (`project-claude/llm-knowledge-base`) holds the **Neuron CLI codebase only** — brain-cli, automation scripts, templates, dashboards, and docs. It is a git-tracked, versioned code repo.
 
-## Vault Structure
+The **live vault** (actual Inbox/, Daily/, memory/, raw/, wiki/, Archive/, Brain-Index/ content) lives in a separate, non-remote local repo at `~/knowledge-base`. Never create vault directories (Inbox/, wiki/, memory/, raw/, Archive/, Brain-Index/) inside this code repo — that would fragment vault data across two locations. All LLM agents (compile, lint, consolidate, insights, daily) operate against `~/knowledge-base`, not this repo.
+
+## This Repo's Structure
+
+```
+brain-cli/       — Neuron CLI, LLM provider abstraction, search, research, metrics
+scripts/         — Shell automation scripts (ingest, compile, lint, consolidate, session-extract)
+templates/       — Obsidian Templater templates
+Dashboards/      — Dataview dashboard templates
+Notes/           — Project notes/docs for the CLI itself
+docs/            — Additional documentation
+tests/           — Test fixtures (unit tests live in brain-cli/tests/)
+```
+
+## Live Vault Structure (`~/knowledge-base`, not in this repo)
 
 ```
 Inbox/           — Drop anything here. Auto-processed by brain CLI.
@@ -17,9 +31,6 @@ wiki/
   queries/       — Filed Q&A, research reports, gap questions
   sessions/      — Auto-extracted session learnings
 Archive/         — Processed Inbox items and retired content
-brain-cli/       — Neuron CLI, LLM provider abstraction, search, research, metrics
-scripts/         — Shell automation scripts
-templates/       — Obsidian Templater templates
 ```
 
 ## Provider System
