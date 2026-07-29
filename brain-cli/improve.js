@@ -21,6 +21,29 @@ const SCRIPTS = join(KB_DIR, 'scripts');
 const { loadConfig } = await import(join(__dirname, 'providers.js'));
 const { computeMetrics, getGrade, takeSnapshot } = await import(join(__dirname, 'metrics.js'));
 
+// Step timeouts. Compile is the long pole: one LLM pass that reads every
+// uncompiled source and writes a summary plus concept articles for each, so it
+// scales with batch size. The old shared 5-minute ceiling killed a *successful*
+// compile of 5 documents mid-flight — the wiki files landed anyway and the loop
+// still recorded a failure, which is a guard that silently discards real work.
+// Lint is a single bounded pass over the existing wiki and stays tighter.
+const COMPILE_TIMEOUT_MS = Number(process.env.NEURON_COMPILE_TIMEOUT_MS) || 20 * 60 * 1000;
+const LINT_TIMEOUT_MS = Number(process.env.NEURON_LINT_TIMEOUT_MS) || 10 * 60 * 1000;
+
+/**
+ * Render a step failure so a timeout is never mistaken for a crash.
+ * A bare "spawnSync bash ETIMEDOUT" reads like the script failed, when it
+ * actually means we stopped waiting — a distinction that decides whether the
+ * fix is "debug the script" or "raise the ceiling".
+ */
+function describeStepFailure(err, timeoutMs) {
+  if (err?.code === 'ETIMEDOUT' || err?.signal === 'SIGTERM') {
+    const mins = Math.round(timeoutMs / 60000);
+    return `timed out after ${mins}m — the step may still have completed; check the wiki and raise the timeout if this recurs`;
+  }
+  return err?.message?.slice(0, 200) || String(err);
+}
+
 // ── Argument Parsing ──────────────────────────────────────────
 
 export function parseImproveArgs(args) {
@@ -88,11 +111,11 @@ async function runIteration(iterationNum, opts) {
   try {
     execFileSync('bash', [join(SCRIPTS, 'compile.sh')], {
       stdio: 'pipe',
-      timeout: 300000,
+      timeout: COMPILE_TIMEOUT_MS,
     });
     console.log('  Compilation complete.');
   } catch (e) {
-    console.log(`  Compilation: ${e.message?.slice(0, 100)}`);
+    console.log(`  Compilation: ${describeStepFailure(e, COMPILE_TIMEOUT_MS)}`);
   }
 
   // Step 2: Lint
@@ -100,11 +123,11 @@ async function runIteration(iterationNum, opts) {
   try {
     execFileSync('bash', [join(SCRIPTS, 'lint.sh')], {
       stdio: 'pipe',
-      timeout: 300000,
+      timeout: LINT_TIMEOUT_MS,
     });
     console.log('  Lint complete.');
   } catch (e) {
-    throw new Error(`Lint step failed — aborting iteration: ${e.message?.slice(0, 200)}`);
+    throw new Error(`Lint step failed — aborting iteration: ${describeStepFailure(e, LINT_TIMEOUT_MS)}`);
   }
 
   // Step 3: Check for gaps (from lint report)

@@ -12,7 +12,8 @@ Three independent root causes, all fixed the same day. Retrieval-quality items b
 | 2 | `lint.sh`: `claude: command not found` | The Claude Code npm→native migration moved the binary to `~/.local/bin`; the LaunchAgent's hardcoded `PATH` never included it | Added `~/.local/bin` and `/opt/homebrew/bin` to the plist `PATH`, reloaded the job |
 | 3 | `auto-commit.sh` exited 1 every night; no vault commit for ~2 weeks | The "are there changes?" check counted **untracked** files, so it saw work to do while allowlist staging had staged nothing — `git commit` then failed on an empty index | Gate on the staged index only; added `wiki/lint-report.json`, `Projects/`, `Archive/` to the allowlist |
 | 4 | 9 files failing `classify-check.sh` | Legacy files pre-dating the mandatory `classification:` frontmatter rule | Backfilled `classification: PRIVATE`; audit now ALL CLEAR |
-| 5 | Three copies of `brain-cli/` on disk | A stale copy plus an old dated backup had accumulated inside the live vault; the executing code is this repo via `npm link` | Stale copies archived; vault keeps only its runtime state + config |
+| 5 | Loop reported `Compilation: spawnSync bash ETIMEDOUT` on a compile that **succeeded** | `improve.js` capped compile at 5 minutes — but compile is one LLM pass over every uncompiled source, so it scales with batch size. A 5-document batch blew the ceiling; the wiki files landed anyway and the loop still recorded failure | Compile raised to 20m (`NEURON_COMPILE_TIMEOUT_MS`), lint to 10m; timeouts now render as "timed out — may still have completed" instead of a crash-shaped message |
+| 6 | Three copies of `brain-cli/` on disk | A stale copy plus an old dated backup had accumulated inside the live vault; the executing code is this repo via `npm link` | Stale copies archived; vault keeps only its runtime state + config |
 
 ## The real lesson: no Sense stage
 
@@ -38,6 +39,9 @@ Fixed by `scripts/neuron-health.sh` (new), called at the end of `scripts/neuron-
 2. **Guards must test the real condition** — the staged index, not "any untracked file". A guard that
    checks a proxy manufactures confidence.
 3. **Assert the downstream artifact.** "Did the script run?" is not "did the commit land?"
+4. **A timeout is not a failure.** Row 5 is the sharpest case in this audit: the work completed and the
+   supervisor recorded a failure because it stopped waiting. Any ceiling that can fire on success must
+   say so in its message, or the next reader debugs a script that was never broken.
 
 ## Prioritized backlog
 
