@@ -37,13 +37,13 @@ fi
 # --staged: neuron-sync has already staged exactly what it wants committed.
 # Otherwise: allowlist staging — mirrors neuron-sync step 4 (no git add -A).
 if [[ "$STAGED_MODE" -eq 0 ]]; then
-  for d in wiki memory raw Research Notes Daily UGC-Dual-Path docs; do
+  for d in wiki memory raw Research Notes Daily UGC-Dual-Path docs Projects Archive; do
     [ -d "$d" ] && git add -- "$d"'/*.md' 2>/dev/null || true
   done
   [ -d skills ] && git add -- skills 2>/dev/null || true
   # Per-file adds: one missing pathspec (approvals.log pre-first-approval) would
   # abort a combined git add for ALL listed files.
-  for f in REVIEW.md approvals.log .gitignore CLAUDE.md README.md; do
+  for f in REVIEW.md approvals.log .gitignore CLAUDE.md README.md wiki/lint-report.json; do
     [ -f "$KB_DIR/$f" ] && git add -- "$f" 2>/dev/null || true
   done
 fi
@@ -53,9 +53,12 @@ fi
 # same second leave "racy" index entries, and `git diff --quiet` short-circuits
 # on the stat mismatch WITHOUT content-checking — producing empty commits.
 git update-index -q --refresh 2>/dev/null || true
-if git diff --quiet HEAD 2>/dev/null && git diff --cached --quiet 2>/dev/null \
-   && { [[ "$STAGED_MODE" -eq 1 ]] || [[ -z "$(git ls-files --others --exclude-standard 2>/dev/null)" ]]; }; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S') — No changes to commit" >> "$LOG_FILE"
+# Gate on the STAGED index only. The old check also counted untracked files,
+# which made "changes exist" true (e.g. stray brain-cli/ copies) while the
+# index stayed empty — git commit then failed with exit 1 every night.
+if git diff --cached --quiet 2>/dev/null; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — No staged changes to commit" >> "$LOG_FILE"
+  echo "No staged changes to commit."
   exit 0
 fi
 

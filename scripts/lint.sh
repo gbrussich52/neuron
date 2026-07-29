@@ -1,97 +1,79 @@
 #!/bin/bash
-# lint.sh — Wiki health checks and self-improvement
-# Finds inconsistencies, broken links, missing data, and suggests new articles.
+# lint.sh — Wiki health checks, produces lint-report.json for the improvement loop.
+# Calls claude -p directly (bypassing llm-run) to pass --permission-mode acceptEdits,
+# which auto-accepts the Write tool calls. Without it, claude silently no-ops file writes
+# in non-interactive mode and the loop never gets its JSON contract.
 
 set -euo pipefail
 
 KB_DIR="$HOME/knowledge-base"
 WIKI_DIR="$KB_DIR/wiki"
 LOG_FILE="$KB_DIR/scripts/lint.log"
+TS_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting wiki lint" >> "$LOG_FILE"
 
-# Step 0: Run classification audit first
-echo "Running classification audit..."
-"$KB_DIR/scripts/classify-check.sh" 2>&1 || echo "  (classification issues found — will be addressed in lint)"
-echo ""
+"$KB_DIR/scripts/classify-check.sh" 2>&1 || true
 
-# Count current articles for context
-CONCEPTS=$(ls "$WIKI_DIR/concepts/"*.md 2>/dev/null | wc -l | tr -d ' ')
-SUMMARIES=$(ls "$WIKI_DIR/summaries/"*.md 2>/dev/null | wc -l | tr -d ' ')
-SESSIONS=$(ls "$WIKI_DIR/sessions/"*.md 2>/dev/null | wc -l | tr -d ' ')
+CONCEPTS=$(find "$WIKI_DIR/concepts" -maxdepth 1 -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+SUMMARIES=$(find "$WIKI_DIR/summaries" -maxdepth 1 -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
 
 if [[ "$CONCEPTS" == "0" && "$SUMMARIES" == "0" ]]; then
   echo "Wiki is empty. Run compile.sh first."
   exit 0
 fi
 
-echo "Linting wiki ($CONCEPTS concepts, $SUMMARIES summaries, $SESSIONS sessions)..."
+echo "Linting wiki ($CONCEPTS concepts, $SUMMARIES summaries)..."
 
-LLM_RUN="$KB_DIR/brain-cli/llm-run.js"
+# Bypass llm-run; call claude -p directly so we can pass --permission-mode acceptEdits.
+PROMPT_TEXT=$(cat <<PROMPT
+Write ONE file: $WIKI_DIR/lint-report.json
 
-node "$LLM_RUN" compile --stdin --tools "Read,Write,Glob,Grep,Edit" <<PROMPT 2>&1 | tail -30 >> "$LOG_FILE"
-You are a wiki linter and quality auditor. Your job is to improve an existing knowledge base.
+Steps (do silently):
+1. Use Glob to list every .md under $WIKI_DIR/concepts/ and $WIKI_DIR/summaries/.
+2. Use Read on the relevant ones.
+3. Identify broken wikilinks, orphans (zero inbound links), missing concept articles (referenced by [[link]] but no file exists), vague content.
+4. Assign overall letter grade A-F and numeric score 0-100 (A=90+, B=75-89, C=60-74, D=40-59, F<40).
+5. List concrete researchable gaps with priorities 1-5.
 
-## Your workspace
-- Wiki: $WIKI_DIR/
-  - concepts/ — concept articles
-  - summaries/ — source summaries
-  - queries/ — filed Q&A results
-  - index.md — master index
+Use the Write tool to write $WIKI_DIR/lint-report.json with EXACTLY this JSON (no markdown fences):
 
-## Lint checks (run all of these)
+{
+  "grade": "A|B|C|D|F",
+  "score": <number 0-100>,
+  "generated": "$TS_ISO",
+  "gaps": [
+    { "topic": "<short researchable topic>", "reason": "<why it's a gap>", "priority": <1-5> }
+  ],
+  "issues": [
+    { "type": "broken-link|orphan|missing-article|vague-content", "detail": "<short>" }
+  ]
+}
 
-### 1. Broken links
-- Find all [[wikilinks]] in every .md file
-- Check each link resolves to an actual file
-- Fix or remove broken links
-
-### 2. Orphaned articles
-- Find articles with zero inbound links
-- Add links from related articles, or flag for review
-
-### 3. Inconsistencies
-- Find contradictory facts across articles
-- Resolve by keeping the most authoritative/recent source
-- Add a note about the resolution
-
-### 4. Missing data
-- Find vague statements that could be made specific ('some studies show' → which studies?)
-- Find dates written relatively ('recently') and convert to absolute dates
-- Flag gaps where an article references a concept with no article of its own
-
-### 5. Connection discovery
-- Identify non-obvious connections between concepts that aren't yet linked
-- Add [[wikilinks]] where appropriate
-- Suggest 3-5 new article topics that would fill gaps in the knowledge base
-
-### 6. Index freshness
-- Verify index.md accurately reflects current articles
-- Update stats, fix any stale entries
-
-## Output
-- Fix everything you can directly (edit files in place)
-- Write a human report to $WIKI_DIR/lint-report.md with: what was fixed,
-  what needs human attention, suggested new articles, overall health score.
-- ALSO write a machine-readable report to $WIKI_DIR/lint-report.json with
-  EXACTLY this schema (valid JSON, no markdown fences):
-  {
-    "grade": "A|B|C|D|F",
-    "score": <number 0-100>,
-    "generated": "<ISO timestamp>",
-    "gaps": [
-      { "topic": "<short topic to research>", "reason": "<why it is a gap>", "priority": <1-5> }
-    ],
-    "issues": [
-      { "type": "broken-link|orphan|inconsistency|missing-data", "detail": "<text>" }
-    ]
-  }
-  The "gaps" array drives the autonomous research loop — populate it with
-  concrete, researchable topics. If there are no gaps, use an empty array.
-
-Be aggressive about fixing issues. Conservative about deleting content.
+Empty arrays are fine. Do not print the report. Use Write only. Exit immediately after writing.
 PROMPT
+)
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') — Lint complete" >> "$LOG_FILE"
-echo "---" >> "$LOG_FILE"
-echo "Done. Check $WIKI_DIR/lint-report.md for results."
+echo "$PROMPT_TEXT" | claude -p \
+  --permission-mode acceptEdits \
+  --allowed-tools "Read,Glob,Write" \
+  --model sonnet \
+  >> "$LOG_FILE" 2>&1
+LINT_LLM_EXIT=$?
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') — Lint LLM exit: $LINT_LLM_EXIT" >> "$LOG_FILE"
+
+if [[ ! -f "$WIKI_DIR/lint-report.json" ]]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — ERROR: lint-report.json was not written" >> "$LOG_FILE"
+  echo "ERROR: lint-report.json was not produced. Check $LOG_FILE."
+  exit 1
+fi
+
+if ! node -e "JSON.parse(require('fs').readFileSync('$WIKI_DIR/lint-report.json','utf-8'))" 2>/dev/null; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — ERROR: lint-report.json is invalid JSON" >> "$LOG_FILE"
+  echo "ERROR: lint-report.json is not valid JSON. Check $LOG_FILE."
+  exit 1
+fi
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') — Lint complete (JSON valid)" >> "$LOG_FILE"
+echo "Done. lint-report.json written."

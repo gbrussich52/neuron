@@ -1,7 +1,7 @@
 #!/bin/bash
-# compile.sh — Incrementally compile raw/ sources into wiki/
-# Reads uncompiled sources, generates summaries + concept articles, updates index.
-# Uses Claude CLI with restricted tools.
+# compile.sh — Compile raw/ sources marked compiled:false into wiki/.
+# Calls claude -p directly with --permission-mode acceptEdits so file writes
+# actually execute (without it, claude plans but never writes).
 
 set -euo pipefail
 
@@ -13,8 +13,9 @@ LAST_RUN="$KB_DIR/scripts/.last-compile"
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting wiki compilation" >> "$LOG_FILE"
 
-# Count uncompiled sources (files with 'compiled: false' in frontmatter)
-UNCOMPILED=$(grep -rl 'compiled: false' "$RAW_DIR"/ 2>/dev/null | wc -l | tr -d ' ')
+# grep exits 1 on zero matches; under set -e/pipefail that killed the whole
+# script every night once raw/ was fully compiled. || true keeps no-match benign.
+UNCOMPILED=$({ grep -rl "compiled: false" "$RAW_DIR"/ 2>/dev/null || true; } | wc -l | tr -d ' ')
 
 if [[ "$UNCOMPILED" == "0" ]]; then
   echo "No new sources to compile. Wiki is up to date."
@@ -24,67 +25,55 @@ fi
 
 echo "Found $UNCOMPILED uncompiled source(s). Compiling..."
 
-LLM_RUN="$KB_DIR/brain-cli/llm-run.js"
+PROMPT_TEXT=$(cat <<PROMPT
+Compile raw sources into wiki articles. EXECUTE — do not describe a plan.
 
-node "$LLM_RUN" compile --stdin --tools "Read,Write,Glob,Grep,Edit" <<PROMPT 2>&1 | tail -30 >> "$LOG_FILE"
-You are a knowledge base compiler. Your job is to incrementally compile raw sources into a structured wiki.
-
-## Your workspace
-- Raw sources: $RAW_DIR/ (look for files with 'compiled: false' in frontmatter)
+# Workspace
+- Raw sources: $RAW_DIR/  (files containing "compiled: false" in frontmatter)
 - Wiki output: $WIKI_DIR/
-  - summaries/ — one summary per source (named after the source file)
-  - concepts/ — concept articles (one per topic, linked together)
-  - index.md — master index (auto-maintained)
+  - summaries/ — one summary per source
+  - concepts/ — concept articles (one per topic)
+  - index.md — master index
 
-## Compilation steps
+# Steps (do these silently using Read/Write/Edit tools)
+1. Use Glob to find all .md files in $RAW_DIR/.
+2. Use Read on each. Skip those that do not contain "compiled: false".
+3. For each uncompiled source:
+   a. Use Write to create $WIKI_DIR/summaries/<source-stem>.md — a 200-500 word summary with frontmatter (classification: PRIVATE, source: <original filename>, created: <ISO>, tags: [...]).
+   b. Extract concepts. For each concept:
+      - If $WIKI_DIR/concepts/<concept-slug>.md exists, use Edit to merge new information in.
+      - Otherwise use Write to create $WIKI_DIR/concepts/<concept-slug>.md (frontmatter: classification: PRIVATE, type: concept, created, sources, tags). Include [[wikilinks]] to related concepts.
+   c. Use Edit on the raw source to change "compiled: false" to "compiled: true".
+4. Use Write to update $WIKI_DIR/index.md with current article list, counts, and last-compile timestamp.
 
-1. **Read all uncompiled sources** in $RAW_DIR/ (files containing 'compiled: false')
-2. **For each source**, create a summary in $WIKI_DIR/summaries/:
-   - Title, key points, tags, backlinks to related concepts
-   - Filename: match the source filename but with .md extension
-3. **Extract concepts** from the new sources:
-   - If a concept article already exists in $WIKI_DIR/concepts/, UPDATE it with new information
-   - If it's a new concept, CREATE a new article
-   - Each concept article should have: definition, key facts, related concepts (as [[wikilinks]]), source references
-4. **Update $WIKI_DIR/index.md**:
-   - List all concepts alphabetically with one-line descriptions
-   - List all sources with dates and tags
-   - Update stats (total sources, concepts, last compile date)
-5. **Mark sources as compiled**: change 'compiled: false' to 'compiled: true' in each processed raw file
-
-## Formatting rules
-- Use [[wikilinks]] for cross-references between concept articles (Obsidian-compatible)
-- Every article gets frontmatter: title, tags, created, updated, sources
-- Keep articles focused — one concept per file, split if too broad
-- Summaries should be 200-500 words, concept articles 300-1000 words
-- Use ## headings, bullet points, and bold for scanability
-
-## Quality rules
-- Prefer specific facts over vague statements
-- Include numbers, dates, names when available
-- Flag contradictions between sources explicitly
-- If a source is low quality or redundant, note it but still compile it
-
-Be thorough. Read every uncompiled source fully before writing.
+# Rules
+- Use Obsidian-compatible [[wikilinks]] for cross-references.
+- Every wiki file MUST have frontmatter with classification (default PRIVATE).
+- Concept articles 300-1000 words, summaries 200-500.
+- Do NOT print summaries to stdout. Use the file-writing tools only.
+- After processing all sources, exit. No final summary needed.
 PROMPT
+)
+
+echo "$PROMPT_TEXT" | claude -p \
+  --permission-mode acceptEdits \
+  --allowed-tools "Read,Write,Glob,Grep,Edit" \
+  --model sonnet \
+  >> "$LOG_FILE" 2>&1
 COMPILE_EXIT=$?
 
 if [[ $COMPILE_EXIT -ne 0 ]]; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S') — ERROR: Claude CLI exited with code $COMPILE_EXIT" >> "$LOG_FILE"
-  echo "---" >> "$LOG_FILE"
-  echo "Compilation failed (exit code $COMPILE_EXIT). Check $LOG_FILE"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — ERROR: claude exited $COMPILE_EXIT" >> "$LOG_FILE"
+  echo "Compilation failed (exit $COMPILE_EXIT). Check $LOG_FILE"
   exit 1
 fi
 
-# Update last-run timestamp
 date '+%Y-%m-%d %H:%M:%S' > "$LAST_RUN"
 
-# Incremental reindex for semantic search (if enabled)
-if node -e "const c=JSON.parse(require('fs').readFileSync('$KB_DIR/brain-cli/neuron.config.json','utf-8'));process.exit(c.features.semantic_search?0:1)" 2>/dev/null; then
+if neuron config show 2>/dev/null | grep -q "semantic_search: ON"; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Running incremental reindex" >> "$LOG_FILE"
-  node "$KB_DIR/brain-cli/semantic.js" 2>&1 | tail -5 >> "$LOG_FILE" || true
+  neuron reindex 2>&1 | tail -5 >> "$LOG_FILE" || true
 fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Compilation complete" >> "$LOG_FILE"
-echo "---" >> "$LOG_FILE"
 echo "Done. Open ~/knowledge-base/ in Obsidian to browse."
