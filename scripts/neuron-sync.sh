@@ -103,7 +103,7 @@ fi
 # The auto-commit.log lives under scripts/ which is intentionally NOT staged
 # here, so log churn never pollutes commits.
 # ---------------------------------------------------------------------------
-for d in wiki memory raw questions digests Research Notes Daily "UGC-Dual-Path" docs; do
+for d in wiki memory raw questions digests templates Research Notes Daily "UGC-Dual-Path" docs; do
   [ -d "$d" ] && git add -- "$d"'/*.md' 2>/dev/null || true
 done
 [ -d skills ] && git add -- skills 2>/dev/null || true
