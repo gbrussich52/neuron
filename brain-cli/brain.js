@@ -641,6 +641,19 @@ function cmdRollup() {
   console.log(`✓ rollup: ${r.memoryIndex}`);
 }
 
+/**
+ * Weekly research digest over the last N days of wiki/ activity.
+ * Delegates to scripts/digest.sh, which owns the git-scoped change set and the
+ * "quiet week costs nothing" short-circuit.
+ */
+function cmdDigest(args) {
+  const days = args.find(a => /^--days=/.test(a))?.split('=')[1];
+  execFileSync('bash', [join(KB_DIR, 'scripts', 'digest.sh')], {
+    stdio: 'inherit',
+    env: { ...process.env, ...(days ? { NEURON_DIGEST_DAYS: days } : {}) },
+  });
+}
+
 // ── CLI Router ─────────────────────────────────────────────────
 const [,, command, ...args] = process.argv;
 
@@ -677,6 +690,7 @@ const [,, command, ...args] = process.argv;
       case 'config': cmdConfig(args); break;
       case 'status': cmdStatus(); break;
       case 'rollup': cmdRollup(); break;
+      case 'digest': cmdDigest(args); break;
       case 'daily': await cmdDaily(); break;
       case 'insights': await cmdInsights(); break;
       default:
@@ -726,6 +740,7 @@ const [,, command, ...args] = process.argv;
                         --max-iterations N
     improve [opts]      Self-improvement loop (compile→lint→research→repeat)
                         --max-iterations N  --target-grade A-F  --dry-run
+    digest [--days=N]   Weekly research digest from wiki/ (last 7d) → digests/
     review [list|next|  Review queue: approve/reject autonomous research
       approve|reject <n>]
     validate --sweep    Stamp trust/hash on unswept notes (dry-run default)
@@ -739,6 +754,11 @@ const [,, command, ...args] = process.argv;
     config provider <p>   Switch LLM provider (claude-cli, openai-compatible, ...)
     config feature <f> on Toggle feature flags
     config models <a> <m> Set a model in the registry (opus/sonnet/haiku)
+
+  Capture (no subcommand needed — this is the two-second path):
+    neuron <url>        Ingest a link (article, YouTube, PDF) straight to raw/
+    neuron <a sentence> Capture a thought to Inbox/
+    neuron process      File everything sitting in Inbox/
 
   Drop anything into ~/knowledge-base/Inbox/ — it gets auto-processed.
   URLs, YouTube links, text files, PDFs, images — all handled.

@@ -8,7 +8,7 @@
  *   runImprove(args)  — Parse args and run the improvement loop
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
@@ -94,6 +94,112 @@ export function parseImproveArgs(args) {
 
 // ── Single Iteration ──────────────────────────────────────────
 
+// ── Vault state refresh (pre-gate) ────────────────────────────
+
+const LINT_REPORT = join(KB_DIR, 'wiki', 'lint-report.json');
+
+/**
+ * Decide whether the lint report needs regenerating.
+ *
+ * Pure so it can be tested without a vault. Both arguments are epoch-ms.
+ * `null` report mtime means "no report on disk".
+ *
+ * @param {number|null} reportMtime - mtime of lint-report.json
+ * @param {number} newestWikiMtime  - newest mtime of any wiki .md
+ */
+export function lintNeedsRefresh(reportMtime, newestWikiMtime) {
+  if (reportMtime === null || !Number.isFinite(reportMtime)) return true;
+  return newestWikiMtime > reportMtime;
+}
+
+/**
+ * Newest mtime (ms) of any wiki .md file.
+ *
+ * lint-report.md is excluded: it is lint's own output, so counting it would
+ * make every lint run look like a wiki change and re-trigger the next one.
+ * An unreadable tree returns Infinity — failing toward running a lint we did
+ * not need is recoverable; failing toward skipping one we did need is the bug
+ * this whole function exists to prevent.
+ */
+function newestWikiMtime() {
+  const wikiDir = join(KB_DIR, 'wiki');
+  if (!existsSync(wikiDir)) return 0;
+  let newest = 0;
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.name.endsWith('.md') || entry.name === 'lint-report.md') continue;
+      const m = statSync(full).mtimeMs;
+      if (m > newest) newest = m;
+    }
+  };
+  try { walk(wikiDir); } catch { return Infinity; }
+  return newest;
+}
+
+/**
+ * Bring on-disk vault state up to date so it can be graded truthfully.
+ *
+ * Compile and lint used to live ONLY inside runIteration, i.e. below the
+ * target-grade gate in runStandalone. A vault already at target returned before
+ * either ran, with two silent consequences:
+ *
+ *   1. Newly-dropped raw sources were never compiled. The compile-lag penalty
+ *      is 4 points per uncompiled source (capped at 20), so 1-4 new sources
+ *      could not by themselves drag a healthy vault under target — they just
+ *      sat in raw/ indefinitely. Only a batch of 5+ tripped the gate.
+ *   2. lint-report.json froze at its last write while still contributing 15
+ *      points to the composite. The gate was reading a number that only the
+ *      code path it skipped could ever refresh.
+ *
+ * compile.sh returns before its LLM call when nothing is uncompiled, so running
+ * it unconditionally is free. lint.sh always calls the LLM, so it re-runs only
+ * when the wiki actually changed — strictly cheaper than the unconditional lint
+ * every iteration used to pay.
+ *
+ * @param {{ label?: string, strictLint?: boolean }} [options]
+ *   strictLint throws on lint failure (iteration semantics); otherwise the
+ *   error is returned for the caller to act on.
+ * @returns {{ linted: boolean, lintError: string|null }}
+ */
+function refreshVaultState({ label = 'pre', strictLint = false } = {}) {
+  const result = { linted: false, lintError: null };
+
+  console.log(`  [${label}] Compiling raw sources...`);
+  try {
+    execFileSync('bash', [join(SCRIPTS, 'compile.sh')], {
+      stdio: 'pipe',
+      timeout: COMPILE_TIMEOUT_MS,
+    });
+    console.log('  Compilation complete.');
+  } catch (e) {
+    console.log(`  Compilation: ${describeStepFailure(e, COMPILE_TIMEOUT_MS)}`);
+  }
+
+  const reportMtime = existsSync(LINT_REPORT) ? statSync(LINT_REPORT).mtimeMs : null;
+  if (!lintNeedsRefresh(reportMtime, newestWikiMtime())) {
+    console.log(`  [${label}] Lint report already current — skipping lint (saves one LLM pass).`);
+    return result;
+  }
+
+  console.log(`  [${label}] Wiki changed since last lint — refreshing lint report...`);
+  try {
+    execFileSync('bash', [join(SCRIPTS, 'lint.sh')], {
+      stdio: 'pipe',
+      timeout: LINT_TIMEOUT_MS,
+    });
+    result.linted = true;
+    console.log('  Lint complete.');
+  } catch (e) {
+    result.lintError = describeStepFailure(e, LINT_TIMEOUT_MS);
+    if (strictLint) throw new Error(`Lint step failed — aborting iteration: ${result.lintError}`);
+    console.log(`  Lint: ${result.lintError}`);
+  }
+  return result;
+}
+
 /**
  * Run a single improvement iteration:
  *   compile → lint → check gaps → research top gaps → metrics snapshot
@@ -106,29 +212,10 @@ export function parseImproveArgs(args) {
 async function runIteration(iterationNum, opts) {
   console.log(`\n--- Improvement Iteration ${iterationNum} ---\n`);
 
-  // Step 1: Compile
-  console.log('  [1/5] Compiling raw sources...');
-  try {
-    execFileSync('bash', [join(SCRIPTS, 'compile.sh')], {
-      stdio: 'pipe',
-      timeout: COMPILE_TIMEOUT_MS,
-    });
-    console.log('  Compilation complete.');
-  } catch (e) {
-    console.log(`  Compilation: ${describeStepFailure(e, COMPILE_TIMEOUT_MS)}`);
-  }
-
-  // Step 2: Lint
-  console.log('  [2/5] Running wiki lint...');
-  try {
-    execFileSync('bash', [join(SCRIPTS, 'lint.sh')], {
-      stdio: 'pipe',
-      timeout: LINT_TIMEOUT_MS,
-    });
-    console.log('  Lint complete.');
-  } catch (e) {
-    throw new Error(`Lint step failed — aborting iteration: ${describeStepFailure(e, LINT_TIMEOUT_MS)}`);
-  }
+  // Steps 1-2: Compile + lint. Shared with the pre-gate refresh so both paths
+  // apply the same staleness rule; after research writes new wiki files the
+  // report is stale by definition, so the lint that feeds step 3 still runs.
+  refreshVaultState({ label: `${iterationNum}:1-2/5`, strictLint: true });
 
   // Step 3: Check for gaps (from lint report)
   console.log('  [3/5] Analyzing gaps...');
@@ -249,12 +336,22 @@ async function runStandalone(opts) {
   // Shared across all iterations so the cap applies to the whole run, not per-iteration.
   opts.researchBudget = { used: 0, cap: opts.maxResearchCalls };
 
+  // Refresh on-disk state BEFORE grading it. The gate below decides whether any
+  // work happens at all, so grading unrefreshed state let a healthy-looking
+  // vault skip compiling sources it had never seen. See refreshVaultState().
+  const refresh = refreshVaultState({ label: 'pre' });
+
   // Take initial snapshot
   const initialMetrics = computeMetrics();
   const initialGrade = getGrade(initialMetrics);
   console.log(`\n  Starting grade: ${initialGrade.grade} (${initialGrade.score}/100)`);
 
-  if (gradeAtOrAbove(initialGrade.grade, opts.targetGrade)) {
+  if (refresh.lintError) {
+    // Grade is computed partly from the lint report; if we could not refresh it,
+    // the score is not trustworthy enough to authorise an early exit. Fall into
+    // the loop so the failure surfaces via a non-zero exit instead of a green night.
+    console.log(`  Lint could not be refreshed — not trusting the grade to skip the run.`);
+  } else if (gradeAtOrAbove(initialGrade.grade, opts.targetGrade)) {
     console.log(`  Already at or above target grade ${opts.targetGrade}. Nothing to do.`);
     return;
   }

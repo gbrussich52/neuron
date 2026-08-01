@@ -8,9 +8,11 @@ set -euo pipefail
 KB_DIR="$HOME/knowledge-base"
 RAW_DIR="$KB_DIR/raw"
 WIKI_DIR="$KB_DIR/wiki"
+QUESTIONS_DIR="$KB_DIR/questions"
 LOG_FILE="$KB_DIR/scripts/compile.log"
 LAST_RUN="$KB_DIR/scripts/.last-compile"
 
+mkdir -p "$QUESTIONS_DIR"
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting wiki compilation" >> "$LOG_FILE"
 
 # grep exits 1 on zero matches; under set -e/pipefail that killed the whole
@@ -34,6 +36,7 @@ Compile raw sources into wiki articles. EXECUTE — do not describe a plan.
   - summaries/ — one summary per source
   - concepts/ — concept articles (one per topic)
   - index.md — master index
+- Open questions: $QUESTIONS_DIR/ — questions a source raises that the vault cannot answer
 
 # Steps (do these silently using Read/Write/Edit tools)
 1. Use Glob to find all .md files in $RAW_DIR/.
@@ -43,7 +46,15 @@ Compile raw sources into wiki articles. EXECUTE — do not describe a plan.
    b. Extract concepts. For each concept:
       - If $WIKI_DIR/concepts/<concept-slug>.md exists, use Edit to merge new information in.
       - Otherwise use Write to create $WIKI_DIR/concepts/<concept-slug>.md (frontmatter: classification: PRIVATE, type: concept, created, sources, tags). Include [[wikilinks]] to related concepts.
-   c. Use Edit on the raw source to change "compiled: false" to "compiled: true".
+   c. If the source raises a substantive question you CANNOT answer from other
+      material already in the vault, use Write to create
+      $QUESTIONS_DIR/<YYYY-MM-DD>-<question-slug>.md with frontmatter
+      (classification: PRIVATE, type: question, status: open, created: <ISO>,
+      source: <original filename>) and a body stating the question, why the
+      vault cannot answer it, and what would settle it. Do NOT guess an answer
+      and do NOT file a question the vault already answers — check first.
+      Most sources raise zero or one. Filing none is a valid outcome.
+   d. Use Edit on the raw source to change "compiled: false" to "compiled: true".
 4. Use Write to update $WIKI_DIR/index.md with current article list, counts, and last-compile timestamp.
 
 # Rules

@@ -64,7 +64,14 @@ else
   OK=false
 fi
 
-# Current wiki grade, if the lint report exists (informational only).
+# Lint grade from the last lint report (informational only).
+#
+# NOT the vault's composite grade. getGrade() in metrics.js scores the vault out
+# of 100 across content volume, link density, weekly activity, compile lag and
+# lint — lint contributes only 15 of those points. The two routinely disagree
+# (lint C / composite A is normal and not a fault), so this field is named for
+# what it actually is: reading a bare "grade: C" here as vault health is a
+# mistake this comment exists to stop.
 GRADE="unknown"
 if [[ -f "$KB_DIR/wiki/lint-report.json" ]]; then
   GRADE=$(node -e '
@@ -83,7 +90,7 @@ if ! node -e '
     lastSuccess,
     consecutiveFailures: Number(consecutive),
     lastExitCode: Number(exitCode),
-    grade,
+    lintGrade: grade,
     detail: detail || null,
   }, null, 2) + "\n");
 ' "$HEALTH_FILE" "$OK" "$NOW" "$LAST_SUCCESS" "$CONSECUTIVE" "$EXIT_CODE" "$GRADE" "$DETAIL" 2>/dev/null; then
@@ -108,7 +115,7 @@ strip_banner() {
 
 if [[ "$EXIT_CODE" -eq 0 ]]; then
   strip_banner
-  echo "[neuron-health] OK — loop healthy at $NOW (grade $GRADE)"
+  echo "[neuron-health] OK — loop healthy at $NOW (lint grade $GRADE; not the composite vault grade)"
   exit 0
 fi
 

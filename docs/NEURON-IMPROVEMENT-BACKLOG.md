@@ -23,7 +23,7 @@ not a health signal. A loop that cannot report its own health is not autonomous 
 
 Fixed by `scripts/neuron-health.sh` (new), called at the end of `scripts/neuron-nightly.sh`:
 
-- Writes `logs/health.json` — `{ok, lastRun, lastSuccess, consecutiveFailures, lastExitCode, grade, detail}`.
+- Writes `logs/health.json` — `{ok, lastRun, lastSuccess, consecutiveFailures, lastExitCode, lintGrade, detail}`.
 - Counts the night as healthy only if **both** the improve loop and the commit succeeded. A green
   improve with a broken commit is precisely the half-working state that hid this outage.
 - On `consecutiveFailures >= 2` (configurable via `NEURON_ESCALATE_AFTER`): a macOS notification plus

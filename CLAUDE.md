@@ -30,8 +30,37 @@ wiki/
   summaries/     — Per-source summaries
   queries/       — Filed Q&A, research reports, gap questions
   sessions/      — Auto-extracted session learnings
+questions/       — Open questions raised by a source, unresolved (one per file)
+digests/         — Weekly research digests, YYYY-MM-DD.md (week ending)
 Archive/         — Processed Inbox items and retired content
 ```
+
+## Open Questions (`questions/`)
+
+When a source raises a substantive question the vault cannot answer, file it in
+`questions/` instead of guessing. Use `templates/Open Question.md`.
+
+- One question per file, `YYYY-MM-DD-slug.md`.
+- `status: open | answered | dropped`. Answered questions link the wiki note
+  that resolved them; dropped ones say why in one line.
+- Check `wiki/` before filing — a question the vault already answers is noise.
+- Filing zero questions for a source is a valid outcome. Do not manufacture them.
+
+An open question is the highest-signal research input there is: it is a gap a
+human actually hit, not one a linter inferred.
+
+## Digests (`digests/`)
+
+`neuron digest` writes a weekly digest scoped to the **last 7 days** of `wiki/`
+activity. Two rules it must never break:
+
+1. **Read `wiki/`, never `raw/`.** The wiki is the processed layer; raw is not.
+2. **Scope to the window.** A digest that restates the whole vault every week
+   is just the vault, and stops being read. The 7-day change set is computed
+   from git in `scripts/digest.sh`, not asked of the model.
+
+Respect the trust ladder in digests: `unverified` notes are reported as leads
+("draft note claims…"), never as established fact.
 
 ## Provider System
 

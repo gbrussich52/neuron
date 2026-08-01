@@ -1,5 +1,36 @@
 import { describe, it, expect } from 'vitest';
-import { parseGaps, parseImproveArgs } from '../improve.js';
+import { parseGaps, parseImproveArgs, lintNeedsRefresh } from '../improve.js';
+
+// Regression: the nightly loop graded the vault BEFORE compiling or linting,
+// then skipped both when the grade was already at target — so lint-report.json
+// froze while still feeding 15 points into that same grade, and 1-4 newly
+// dropped raw sources were never compiled. lintNeedsRefresh is the cost gate
+// that lets the refresh run every night without paying for a needless LLM lint.
+describe('lintNeedsRefresh', () => {
+  it('refreshes when no lint report exists yet', () => {
+    expect(lintNeedsRefresh(null, 1000)).toBe(true);
+  });
+
+  it('refreshes when the wiki changed after the last report', () => {
+    expect(lintNeedsRefresh(1000, 2000)).toBe(true);
+  });
+
+  it('skips when the report is newer than every wiki file', () => {
+    expect(lintNeedsRefresh(2000, 1000)).toBe(false);
+  });
+
+  it('skips on an exact mtime tie — the report already reflects that write', () => {
+    expect(lintNeedsRefresh(1000, 1000)).toBe(false);
+  });
+
+  it('refreshes rather than skips when the wiki tree is unreadable (Infinity)', () => {
+    expect(lintNeedsRefresh(1000, Infinity)).toBe(true);
+  });
+
+  it('treats a NaN report mtime as no report rather than silently skipping', () => {
+    expect(lintNeedsRefresh(NaN, 1000)).toBe(true);
+  });
+});
 
 describe('parseGaps', () => {
   it('extracts gap topics from a valid lint-report.json string', () => {

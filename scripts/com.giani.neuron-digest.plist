@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.giani.neuron-digest</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/gianibrussich/.nvm/versions/node/v24.6.0/bin/node</string>
+        <string>/Users/gianibrussich/project-claude/llm-knowledge-base/brain-cli/brain.js</string>
+        <string>digest</string>
+    </array>
+    <!-- Sunday 07:00, after Saturday night's 03:07 improve loop and the 06:00
+         rollup, so the week's last compile is already in the wiki when the
+         digest reads it. Weekday 0 = Sunday. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/gianibrussich/knowledge-base/logs/neuron-digest.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/gianibrussich/knowledge-base/logs/neuron-digest.err.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/gianibrussich/.bun/bin:/Users/gianibrussich/.local/bin:/Users/gianibrussich/.nvm/versions/node/v24.6.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/gianibrussich</string>
+        <key>KB_DIR</key>
+        <string>/Users/gianibrussich/knowledge-base</string>
+    </dict>
+</dict>
+</plist>
