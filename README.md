@@ -31,6 +31,10 @@ You → Inbox/              Drop anything: URLs, files, YouTube links, brain dum
         ↓
       improve              Self-improvement loop: compile → lint → research → recompile
         ↓
+      questions/           Anything a source raised that the vault can't answer — filed, not guessed
+        ↓
+      digest               Weekly digest of the last 7 days only, read from wiki/ (never raw/)
+        ↓
       metrics              Brain Score (A-F) tracks if the system is making you smarter
         ↓
       Obsidian             Browse everything with Dataview dashboards + classification badges
@@ -59,6 +63,8 @@ You → Inbox/              Drop anything: URLs, files, YouTube links, brain dum
 - **Autonomous research** — `neuron research "topic"` decomposes a topic, searches the web via Tavily, ingests results, compiles into wiki
 - **Karpathy deep research** — `neuron deep-research "topic"` iteratively researches, compiles, finds gaps, researches gaps, recompiles until thorough
 - **Self-improvement loop** — `neuron improve` runs compile→lint→research gaps→recompile until Brain Score reaches target grade
+- **Open questions** — a source that raises a question the vault can't answer gets a note in `questions/`, not a guessed answer. The highest-signal research input there is: a gap a human actually hit
+- **Weekly digest** — `neuron digest` writes `digests/YYYY-MM-DD.md` covering only the last 7 days of `wiki/` activity. The change set comes from git, not from the model, so the digest can't quietly widen into "here is your whole vault again". A quiet week costs zero LLM calls
 - **Brain Score** — `neuron metrics` computes a composite A-F grade: content volume, link density, weekly activity, compilation lag, lint health
 - **Dataview dashboards** — Knowledge Evolution, Thinking Changes, Brain Dump Tracker, Brain Score
 
@@ -134,6 +140,8 @@ neuron metrics --history          # Show score trends over time
 neuron research "topic"           # Autonomous web research (single pass)
 neuron deep-research "topic"      # Karpathy auto-research loop (iterative)
 neuron improve                    # Self-improvement loop (compile→lint→research→repeat)
+neuron digest                     # Weekly digest of the last 7 days → digests/
+neuron digest --days=30           # Wider window when you've been away
 
 # Config
 neuron config                     # Show current provider, models, features
@@ -242,12 +250,18 @@ The `.gitignore` blocks PRIVATE and CONFIDENTIAL files. `classify-check.sh` audi
 
 ## Automation
 
-| Trigger | What happens |
-|---------|-------------|
-| Every session end | Learnings extracted → `wiki/sessions/` |
-| Nightly 10pm | `Notes/` swept → `Inbox/` for processing |
-| Monday 9am | Memory consolidation + session promotion |
-| Wednesday 9am | KB compile + lint + classification audit |
+| Job | Schedule | What happens |
+|-----|----------|-------------|
+| `com.giani.notes-sweep` | Daily 22:00 | `Notes/` swept → `Inbox/` for processing |
+| `com.giani.neuron-improve` | Daily 03:07 | `neuron-nightly.sh`: process Inbox → compile → lint → improve loop → health sensor |
+| `com.giani.neuron-rollup` | Daily 06:00 | `neuron rollup` → `Command-Center.md` + memory index |
+| `com.giani.neuron-digest` | Sunday 07:00 | `neuron digest` → `digests/YYYY-MM-DD.md` (last 7 days) |
+| `com.giani.memory-consolidation` | Monday 09:00 | Memory consolidation + session promotion |
+| Every session end | on hook | Learnings extracted → `wiki/sessions/` (optional, see below) |
+
+The nightly loop compiles and lints **before** it grades the vault. Grading
+first and skipping the work when the grade looks fine means a vault that is
+already healthy stops ingesting — see `refreshVaultState()` in `improve.js`.
 
 ### Claude Code Session Hook (optional)
 
@@ -308,6 +322,8 @@ Neuron is a concrete implementation that merges ideas from several sources. Each
 - **[Nick Spisak — LLM Knowledge Pipeline](https://x.com/NickSpisak_/status/2041012360668750229)** — Built a pipeline using yt-dlp for YouTube transcripts, [steipete's summarize CLI](https://github.com/steipete/summarize) for content compression, [tobi/qmd](https://github.com/tobi/qmd) for blazing-fast local markdown search, and a brain CLI that indexes YouTube archives, X exports, and AI agent JSONL logs. Neuron's YouTube ingestion, brain CLI architecture, and the file watcher concept come from this.
 
 - **[CyrilXBT — Second Brain System](https://x.com/cyrilXBT/status/2040988306154901742)** — A complete Obsidian-based second brain with 4-folder PARA structure (Inbox/Notes/Projects/Archive), Dataview + Templater + Canvas integration, a daily note template, a CLAUDE.md vault config, and 4 Claude workflows: Morning Briefing, Idea Development, Connection Finder, and Writing Accelerator. Neuron's folder structure, daily note template, and the 4 workflow sections come directly from this.
+
+- **[CyrilXBT — Opus Research System](https://x.com/cyrilxbt/status/2082304935547314254)** (Jul 29, 2026) — A follow-up to the same author's second-brain thread: a tighter `/raw` → `/wiki` → `/questions` → `/digests` research protocol, with the rules that a source's *unresolved* questions get parked rather than guessed at, and that a digest must cover only the last 7 days. Neuron already had raw→wiki with contradiction flagging; `questions/`, `digests/`, and `neuron digest` come from this. Neuron deliberately does **not** adopt its Obsidian Local REST API connection — that plugin exists so a filesystem-less client can reach a vault, and adding it here would create a second write path that bypasses the trust ladder and the pre-push leak scan.
 
 - **[Michael Chomsky — Self-Updating KB Vision](https://x.com/michael_chomsky/status/2040946855148929499)** — A vision for auto-syncing knowledge from iMessage, email, X, and AI chats into plain observable markdown files with MCP-style access, rules-based auto-organization, and proactive life-improvement suggestions. Neuron's proactive insight generation and the philosophy of "the system should actively make you smarter" come from this.
 
