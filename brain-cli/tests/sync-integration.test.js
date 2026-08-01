@@ -13,8 +13,19 @@ const SCRIPTS = process.env.KB_SCRIPTS || join(homedir(), 'knowledge-base', 'scr
 const HAVE = existsSync(join(SCRIPTS, 'neuron-sync.sh'));
 
 // A well-formed unverified private note — used as the baseline "safe" content.
-const UNVERIFIED =
-  '---\nclassification: PRIVATE\ntrust: unverified\nauthor: claude\nsource: session\ncaptured_at: 2026-06-09\n---\n\n# Note\nSafe body text.';
+//
+// captured_at MUST be relative to now, never hardcoded. archiveAged() moves any
+// unverified note older than trust.aging_archive_days (default 30) out to
+// Archive/_aged-review/ during `review apply --age`, which neuron-sync runs at
+// step 2 — i.e. BEFORE staging. A fixed date therefore turns these tests into a
+// time bomb: they pass while the date is fresh, then start failing on the day it
+// crosses the TTL, and the failure looks like a staging/leak-guard regression
+// rather than an expired fixture. That is exactly what happened here — the date
+// was 2026-06-09 and four tests began failing silently around 2026-07-09.
+const today = () => new Date().toISOString().slice(0, 10);
+const unverifiedNote = (capturedAt = today()) =>
+  `---\nclassification: PRIVATE\ntrust: unverified\nauthor: claude\nsource: session\ncaptured_at: ${capturedAt}\n---\n\n# Note\nSafe body text.`;
+const UNVERIFIED = unverifiedNote();
 
 /**
  * Run a shell command inside a disposable vault.
@@ -170,6 +181,33 @@ describe.skipIf(!HAVE)('neuron-sync chokepoint', () => {
 
     expect(out).toContain('another sync is running');
     expect(sh('git ls-files', vault)).not.toContain('wiki/concepts/x.md');
+  });
+
+  // -------------------------------------------------------------------
+  // Aging: an unverified note past trust.aging_archive_days is moved to
+  // Archive/_aged-review/ and NOT committed — and critically, not destroyed.
+  // This behaviour was previously untested; it was only visible as four
+  // unrelated tests mysteriously failing once their fixture date expired.
+  // The vault rule is "never delete content without archiving first", so the
+  // assertion that matters is that the body survives the move.
+  // -------------------------------------------------------------------
+  it('aging: an unverified note past the TTL is archived, not committed, not lost', () => {
+    // 60 days back — comfortably past the 30-day default, without hardcoding a
+    // calendar date that would expire the way the old fixture did.
+    const old = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+    writeFileSync(join(vault, 'wiki/concepts/stale.md'), unverifiedNote(old));
+
+    const out = sh('bash scripts/neuron-sync.sh', vault);
+    expect(out).toContain('Aged out');
+
+    // Gone from the working tree and never committed...
+    expect(existsSync(join(vault, 'wiki/concepts/stale.md'))).toBe(false);
+    expect(sh('git ls-files', vault)).not.toContain('wiki/concepts/stale.md');
+
+    // ...but preserved on disk, date-prefixed, with its body intact.
+    const archived = join(vault, 'Archive', '_aged-review', `${old}-stale.md`);
+    expect(existsSync(archived)).toBe(true);
+    expect(readFileSync(archived, 'utf-8')).toContain('Safe body text.');
   });
 
   // -------------------------------------------------------------------
