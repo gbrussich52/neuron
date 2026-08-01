@@ -111,13 +111,17 @@ export function computeMetrics() {
   const articlesWithRelated = allArticles.filter(a => a.content.includes('## Related')).length;
 
   // Lint health — prefer the structured JSON report, fall back to .md
+  // lintScore (0-100) is read alongside the letter: bucketing a 0-100 score into
+  // five letters throws away the resolution the grade needs to move at all.
   let lintGrade = 'N/A';
+  let lintScore = null;
   const lintJson = join(KB_DIR, 'wiki', 'lint-report.json');
   const lintMd = join(KB_DIR, 'wiki', 'lint-report.md');
   if (existsSync(lintJson)) {
     try {
       const parsed = JSON.parse(readFileSync(lintJson, 'utf-8'));
       if (parsed.grade) lintGrade = String(parsed.grade).toUpperCase();
+      if (Number.isFinite(parsed.score)) lintScore = Math.max(0, Math.min(100, parsed.score));
     } catch { /* metrics is a display path — degrade to the .md grade rather than throw */ }
   }
   if (lintGrade === 'N/A' && existsSync(lintMd)) {
@@ -161,6 +165,7 @@ export function computeMetrics() {
     },
     health: {
       lintGrade,
+      lintScore,
       compilationLag: uncompiledCount,
     },
     deltas,
@@ -172,37 +177,57 @@ export function computeMetrics() {
 /**
  * Calculate composite grade A-F based on metrics.
  *
- * Scoring (0-100):
- *   - Content volume:     up to 20 points (10+ concepts = 20)
- *   - Link density:       up to 25 points (2+ links/article = 25)
- *   - Weekly activity:    up to 20 points (3+ new items = 20)
- *   - Compilation lag:    up to 20 points (0 uncompiled = 20)
- *   - Lint health:        up to 15 points (A = 15)
+ * Scoring (0-100) — CORRECTNESS-DOMINANT, rebalanced 2026-08-01:
+ *   - Lint health:        up to 60 points (uses the 0-100 lint score directly)
+ *   - Link density:       up to 15 points (2+ links/article = 15)
+ *   - Compilation lag:    up to 15 points (0 uncompiled = 15)
+ *   - Content volume:     up to 10 points (20+ articles = 10)
+ *   - Weekly activity:    REMOVED
+ *
+ * WHY IT CHANGED
+ *   The previous weights were content 20 / links 25 / weekly 20 / lag 20 /
+ *   lint 15. On 2026-08-01 the vault scored 89 = B with FOUR components maxed
+ *   and lint at D. Because lint capped at 15 and F only cost 15 more points, a
+ *   total lint failure still scored 85 — comfortably above the B target the
+ *   improve loop gates on. The loop therefore printed "Already at or above
+ *   target grade B. Nothing to do." every night while 15 broken wikilinks and
+ *   11 missing articles sat unaddressed, and the vault froze for five weeks
+ *   while reporting healthy.
+ *
+ *   Weekly activity is deleted outright: "files touched this week" measures
+ *   motion, not quality, and awarded a full 20 points during any active week —
+ *   which is precisely when a defect is most likely to have just been
+ *   introduced. A correct, finished vault that nobody edited was penalised;
+ *   a broken one being churned was rewarded.
+ *
+ *   Correctness now decides the grade. Everything else can only modulate it:
+ *   with all three remaining components maxed (40), a vault still needs a lint
+ *   score of ~58 to reach B and ~83 to reach A.
  */
 export function getGrade(metrics) {
   let score = 0;
 
-  // Content volume (0-20)
+  // Lint health (0-60) — the dominant term.
+  // Prefer the numeric score; fall back to letter midpoints for older reports
+  // that predate lintScore, and to a neutral 50 when lint has never run.
+  const letterMidpoint = { A: 95, B: 82, C: 67, D: 50, F: 20, 'N/A': 50 };
+  const lintPct = Number.isFinite(metrics.health.lintScore)
+    ? metrics.health.lintScore
+    : (letterMidpoint[metrics.health.lintGrade] ?? 50);
+  score += (lintPct / 100) * 60;
+
+  // Link density (0-15): 2+ links/article = full marks
+  score += Math.min(15, metrics.connections.linkDensity * 7.5);
+
+  // Compilation lag (0-15): full points for 0 uncompiled, decreasing
+  score += 15 - Math.min(15, metrics.health.compilationLag * 3);
+
+  // Content volume (0-10): a vault needs some substance, but having files is
+  // not quality — this is a floor check, not a growth incentive.
   const contentCount = metrics.counts.concepts + metrics.counts.summaries;
-  score += Math.min(20, contentCount * 2);
+  score += Math.min(10, contentCount * 0.5);
 
-  // Link density (0-25)
-  score += Math.min(25, metrics.connections.linkDensity * 12.5);
-
-  // Weekly activity (0-20)
-  const weeklyTotal = metrics.weekly.newConcepts + metrics.weekly.newQueries + metrics.weekly.newSessions;
-  score += Math.min(20, weeklyTotal * 5);
-
-  // Compilation lag (0-20): full points for 0 uncompiled, decreases
-  const lagPenalty = Math.min(20, metrics.health.compilationLag * 4);
-  score += 20 - lagPenalty;
-
-  // Lint health (0-15)
-  const lintScores = { A: 15, B: 12, C: 8, D: 4, F: 0, 'N/A': 7 };
-  score += lintScores[metrics.health.lintGrade] || 7;
-
-  // Round off linkDensity float drift. The [0,100] clamp is a defensive guard
-  // for future scoring-weight changes — today's component caps already bound the sum.
+  // Round off float drift; clamp defensively.
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   // Convert to letter
