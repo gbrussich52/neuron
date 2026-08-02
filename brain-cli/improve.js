@@ -232,6 +232,10 @@ async function runIteration(iterationNum, opts) {
   const config = loadConfig();
   const gapsToResearch = config.improve?.research_gaps_per_iteration || 2;
 
+  // Tracks whether step 4 actually wrote anything, so step 5 only pays for a
+  // re-lint when there is new output to score.
+  let researchedThisIteration = false;
+
   if (gaps.length > 0 && !opts.dryRun) {
     const topGaps = gaps.slice(0, gapsToResearch);
     console.log(`  [4/5] Researching top ${topGaps.length} gap(s)...`);
@@ -253,6 +257,7 @@ async function runIteration(iterationNum, opts) {
         // routeToReview: true — improvement-loop research lands at its final path in
         // wiki/concepts/ born trust: unverified; REVIEW.md is the approval surface.
         await runResearch(gap, { routeToReview: true });
+        researchedThisIteration = true;
       } catch (e) {
         console.log(`    Research failed for "${gap}": ${e.message?.slice(0, 80)}`);
       }
@@ -262,6 +267,19 @@ async function runIteration(iterationNum, opts) {
   }
 
   // Step 5: Metrics snapshot
+  //
+  // Re-lint FIRST. Steps 1-2 lint the vault as it was BEFORE step 4 wrote new
+  // articles, so grading here without a refresh scores a state that predates
+  // this iteration's own work. That is what produced "Saturated — gaps recurred
+  // without progress": the loop could not observe anything it did, so the score
+  // never moved and the same gaps resurfaced every round.
+  //
+  // This was uneconomic when lint was a multi-minute nested-LLM call; lint-core.py
+  // is deterministic and runs in ~0.03s, so refreshing here is effectively free.
+  if (researchedThisIteration) {
+    console.log('  [5/5] Re-linting to score this iteration\'s output...');
+    refreshVaultState({ label: `${iterationNum}:5/5`, strictLint: false });
+  }
   console.log('  [5/5] Taking metrics snapshot...');
   const metrics = computeMetrics();
   const { grade, score } = getGrade(metrics);
