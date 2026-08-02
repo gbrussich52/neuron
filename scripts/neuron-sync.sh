@@ -103,13 +103,13 @@ fi
 # The auto-commit.log lives under scripts/ which is intentionally NOT staged
 # here, so log churn never pollutes commits.
 # ---------------------------------------------------------------------------
-for d in wiki memory raw questions digests templates Research Notes Daily "UGC-Dual-Path" docs; do
+for d in wiki memory raw questions digests templates Projects Research Notes Daily "UGC-Dual-Path" docs; do
   [ -d "$d" ] && git add -- "$d"'/*.md' 2>/dev/null || true
 done
 [ -d skills ] && git add -- skills 2>/dev/null || true
 # Per-file adds: a single combined `git add` aborts ALL its pathspecs when one
 # file (e.g. approvals.log before the first approval) doesn't exist yet.
-for f in REVIEW.md approvals.log .gitignore CLAUDE.md README.md; do
+for f in REVIEW.md approvals.log .gitignore CLAUDE.md README.md Command-Center.md; do
   [ -f "$f" ] && git add -- "$f" 2>/dev/null
 done || true
 
