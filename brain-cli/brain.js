@@ -635,7 +635,8 @@ async function cmdReview(args) {
 function cmdRollup() {
   const kbDir = KB_DIR;
   const indexPath = process.env.NEURON_MEMORY_INDEX
-    || join(process.env.HOME, '.claude/projects/-Users-gianibrussich-project-claude/memory/MEMORY.md');
+    // Canonical since C1 (2026-09-01); old .claude/projects/.../memory path is now a symlink here.
+    || join(process.env.HOME, 'project-claude/.claude/memory/MEMORY.md');
   const r = runRollup({ kbDir, indexPath });
   console.log(`✓ rollup: ${r.commandCenter}`);
   console.log(`✓ rollup: ${r.memoryIndex}`);
