@@ -30,3 +30,30 @@ it('excludes CONFIDENTIAL nodes (case-insensitive) from the dashboard', () => {
   expect(md).not.toContain('[[secret]]');
   expect(md).toContain('[[shown]]');
 });
+
+it('preserves an existing neuron-health escalation banner across a regenerate', () => {
+  // Simulate neuron-health.sh (03:07) having already spliced a banner into
+  // Command-Center.md before this rollup (06:00) regenerates it — this is
+  // the exact collision found 2026-09-02: rollup was clobbering the banner.
+  writeProjectNode(kb, { slug: 'pap', title: 'Property Appraiser Pro', status: 'live', next_action: 'UAD export', last_touched: '2026-06-10' });
+  const file = buildCommandCenter(kb);
+  const banner = '<!-- neuron-health-banner -->\n> [!warning] Neuron loop unhealthy (2026-09-02T07:15:33Z)\n> Neuron nightly loop has failed 7 runs in a row (last success: 2026-08-26T07:15:03Z). auto-commit exited 1\n<!-- /neuron-health-banner -->\n\n';
+  const original = readFileSync(file, 'utf8');
+  const m = original.match(/^---\n[\s\S]*?\n---\n/);
+  const withBanner = m ? original.slice(0, m[0].length) + '\n' + banner + original.slice(m[0].length) : banner + original;
+  writeFileSync(file, withBanner);
+
+  // Regenerate, as the 06:00 rollup does.
+  const md = readFileSync(buildCommandCenter(kb), 'utf8');
+  expect(md).toContain('<!-- neuron-health-banner -->');
+  expect(md).toContain('Neuron nightly loop has failed 7 runs in a row');
+  expect(md).toContain('<!-- /neuron-health-banner -->');
+  expect(md).toContain('[[pap]]');
+});
+
+it('regenerates cleanly with no banner when none was present', () => {
+  writeProjectNode(kb, { slug: 'pap', title: 'Property Appraiser Pro', status: 'live', next_action: 'UAD export', last_touched: '2026-06-10' });
+  const md = readFileSync(buildCommandCenter(kb), 'utf8');
+  expect(md).not.toContain('neuron-health-banner');
+  expect(md).toContain('[[pap]]');
+});
