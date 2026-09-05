@@ -70,6 +70,7 @@ echo "$PROMPT_TEXT" | claude -p \
   --permission-mode acceptEdits \
   --allowed-tools "Read,Write,Glob,Grep,Edit" \
   --model sonnet \
+  --max-turns 60 \
   >> "$LOG_FILE" 2>&1
 COMPILE_EXIT=$?
 
