@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, symlinkSync, realpathSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { writeProjectNode } from '../projects.js';
 import { buildMemoryIndex, PROJECTS_START, PROJECTS_END } from '../memory-index.js';
 
@@ -68,4 +68,67 @@ it('excludes CONFIDENTIAL nodes from the count', () => {
   writeFileSync(idx, `## Projects\n${PROJECTS_START}\n\n${PROJECTS_END}\n`);
   buildMemoryIndex(kb, idx);
   expect(readFileSync(idx, 'utf8')).toMatch(/1 projects/);
+});
+
+// --- The pointer that broke six times ----------------------------------------
+//
+// 09-05, 09-09, 09-10, 09-12, 09-13, 09-16: the Command-Center link in MEMORY.md
+// flipped between three and four `../` levels and was hand-fixed each time. The
+// writer was never wrong about the block, only about where the file lives:
+// `~/.claude/projects/-Users-gianibrussich-project-claude/memory` is a symlink to
+// `project-claude/.claude/memory`, one directory deeper, and `path.relative` is
+// lexical. Whichever path the caller passed decided which link got written.
+it('a symlinked index path yields the link the REAL file needs', () => {
+  seedProjects(1);
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'alias-')));
+  try {
+    const vault = join(root, 'knowledge-base');
+    const real = join(root, 'project-claude', '.claude', 'memory');
+    mkdirSync(join(vault, 'Projects'), { recursive: true });
+    mkdirSync(real, { recursive: true });
+    writeFileSync(join(vault, 'Command-Center.md'), '# CC\n');
+
+    // The alias sits one level deeper than the file it points at — exactly the
+    // shape that produced the extra `../`.
+    const aliasParent = join(root, 'home', 'projects', 'slug');
+    mkdirSync(aliasParent, { recursive: true });
+    const alias = join(aliasParent, 'memory');
+    symlinkSync(real, alias);
+
+    buildMemoryIndex(vault, join(alias, 'MEMORY.md'));
+
+    const link = readFileSync(join(real, 'MEMORY.md'), 'utf8')
+      .match(/\]\(([^)]*Command-Center\.md)\)/)[1];
+    // The only assertion that matters: resolved from where the file actually is,
+    // the link lands on the real Command-Center.md.
+    expect(resolve(real, link)).toBe(join(vault, 'Command-Center.md'));
+    expect(existsSync(resolve(real, link))).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it('both aliases of the same index write the identical link', () => {
+  seedProjects(1);
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'alias2-')));
+  try {
+    const vault = join(root, 'knowledge-base');
+    const real = join(root, 'a', 'b', 'memory');
+    mkdirSync(join(vault, 'Projects'), { recursive: true });
+    mkdirSync(real, { recursive: true });
+    writeFileSync(join(vault, 'Command-Center.md'), '# CC\n');
+    const aliasParent = join(root, 'x', 'y', 'z');
+    mkdirSync(aliasParent, { recursive: true });
+    symlinkSync(real, join(aliasParent, 'memory'));
+
+    const linkFrom = (p) => {
+      buildMemoryIndex(vault, p);
+      return readFileSync(join(real, 'MEMORY.md'), 'utf8')
+        .match(/\]\(([^)]*Command-Center\.md)\)/)[1];
+    };
+    expect(linkFrom(join(aliasParent, 'memory', 'MEMORY.md')))
+      .toBe(linkFrom(join(real, 'MEMORY.md')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

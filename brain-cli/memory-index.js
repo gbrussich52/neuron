@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, realpathSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { readProjectNodes } from './projects.js';
 
@@ -9,9 +9,25 @@ function notConfidential(n) {
   return String(n.data.classification || 'PRIVATE').toUpperCase() !== 'CONFIDENTIAL';
 }
 
+// A relative link is only correct for the file's REAL location. `path.relative` is
+// lexical -- it never resolves symlinks -- so calling this with the legacy alias
+// ~/.claude/projects/-Users-gianibrussich-project-claude/memory (a symlink to
+// project-claude/.claude/memory, one directory deeper) produced `../../../../`,
+// right for the alias and dead for the real file. That is the whole of the
+// Command-Center pointer bug that regressed six times between 09-05 and 09-16:
+// which value landed depended on which path the caller happened to pass. Resolve
+// both ends first and either caller yields the same, correct link.
+function realDir(p) {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;                       // not created yet: lexical is all we have
+  }
+}
+
 function buildBlock(kbDir, indexPath) {
   const count = readProjectNodes(kbDir).filter(notConfidential).length;
-  const rel = relative(dirname(indexPath), join(kbDir, 'Command-Center.md'));
+  const rel = relative(realDir(dirname(indexPath)), join(realDir(kbDir), 'Command-Center.md'));
   return [
     PROJECTS_START,
     `- [Command Center — all projects: status + next action](${rel}) — ${count} projects in Projects/`,
