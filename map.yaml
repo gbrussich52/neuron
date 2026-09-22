@@ -1,0 +1,25 @@
+# llm-knowledge-base/map.yaml, hand-written facts scripts/map/genprojectmap.py cannot detect from
+# disk. Edit this file, not the generated MAP.md next to it. Schema: see
+# scripts/map/projectmap_lib.py module docstring. Regenerate MAP.md after editing:
+#   python3 scripts/map/genprojectmap.py llm-knowledge-base
+
+purpose: Neuron, the brain-cli tool repo. The actual vault lives separately at ~/knowledge-base/
+tier: T1
+status: Scheduled nightly via launchd
+stack: Node.js CLI, Vitest
+relates_to: []
+
+# One row per public-facing channel: kind is site|youtube|facebook|etsy|email|x|
+# tiktok|discord|other. status is live|building|planned|paused.
+channels: []  # none on record, add rows here
+
+services:
+  supabase_schema: null
+  stripe_account: null
+  meta_ad_account: null
+  domains: []
+  other: []
+
+revenue_status: null
+next_action: null
+notes: []
