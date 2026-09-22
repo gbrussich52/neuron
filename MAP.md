@@ -30,10 +30,10 @@ No `.env*.example` file found on disk, names not on record. (This generator neve
 (Matched by directory name appearing in the loop's runner path or scope, a loop that touches this project only indirectly may be missed.)
 
 ## Revenue status
-Not on record, add `revenue_status:` to map.yaml.
+Not a revenue channel. Internal tool, runs fully local, no API costs.
 
 ## Next action
-Not on record, add `next_action:` to map.yaml.
+Watch logs/health.json after the 2026 outage fix; scheduled nightly via launchd.
 
 ---
 Regenerate: `python3 scripts/map/genprojectmap.py llm-knowledge-base`. Edit `llm-knowledge-base/map.yaml` for anything wrong above, not this file.

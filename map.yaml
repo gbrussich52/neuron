@@ -20,6 +20,6 @@ services:
   domains: []
   other: []
 
-revenue_status: null
-next_action: null
+revenue_status: Not a revenue channel. Internal tool, runs fully local, no API costs.
+next_action: Watch logs/health.json after the 2026 outage fix; scheduled nightly via launchd.
 notes: []
