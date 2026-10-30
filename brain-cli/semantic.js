@@ -195,6 +195,31 @@ function toStoredChunk(chunk, embedding) {
   };
 }
 
+// Claude Opus 5.5, 2026-10-29: model-specific prompt formats, read from embed.doc_template /
+// embed.query_prefix in neuron.config.json. embeddinggemma-2 scores +5 MRR points over the old
+// nomic setup only when given its task prompts (150-query eval, docs/embed-eval-2026-10-29.md).
+// Without a template the doc side keeps the old "heading: text" form.
+function docText(chunk, cfg = loadConfig()) {
+  const tpl = cfg.embed?.doc_template;
+  if (!tpl) return `${chunk.heading}: ${chunk.text}`;
+  // Function replacers so a '$&' or '$1' inside a note is kept as written.
+  return tpl.replace('{title}', () => chunk.heading || 'none').replace('{text}', () => chunk.text);
+}
+
+function queryText(query, cfg = loadConfig()) {
+  return `${cfg.embed?.query_prefix ?? ''}${query}`;
+}
+
+// Claude Opus 5.5, 2026-10-29: vectors from two models cannot be compared, so the index records
+// which model built it and search warns when the configured model differs.
+function modelMismatch(index, cfg = loadConfig()) {
+  return index.embedModel && cfg.embed?.model && index.embedModel !== cfg.embed.model
+    ? `index built with ${index.embedModel}, config says ${cfg.embed.model}. Run \`neuron reindex\`.`
+    : null;
+}
+
+export { docText, queryText };
+
 function saveIndex(index) {
   if (!existsSync(INDEX_DIR)) mkdirSync(INDEX_DIR, { recursive: true });
   writeFileSync(EMBEDDINGS_FILE, JSON.stringify(index));
@@ -285,8 +310,9 @@ export async function buildIndex() {
   const config = loadConfig();
   if (!config.embed?.model) {
     console.error('[neuron] No embedding model configured. Set embed.model in neuron.config.json.');
-    console.error('  Recommended: Ollama with nomic-embed-text (free, local)');
-    console.error('  Install: ollama pull nomic-embed-text');
+    // Claude Opus 5.5, 2026-10-29: hint now names the model Neuron uses (was nomic-embed-text).
+    console.error('  Recommended: Ollama with embeddinggemma-2 (free, local)');
+    console.error('  Install: ollama pull embeddinggemma-2');
     process.exit(1);
   }
 
@@ -308,13 +334,14 @@ export async function buildIndex() {
 
   // Generate embeddings
   console.log('  Generating embeddings...');
-  const texts = allChunks.map(c => `${c.heading}: ${c.text}`);
+  const texts = allChunks.map(c => docText(c, config));
   const embeddings = await batchEmbed(texts);
   console.log(`\n  Generated ${embeddings.length} embeddings`);
 
   // Build index
   const index = {
     version: 1,
+    embedModel: config.embed.model,
     builtAt: new Date().toISOString(),
     chunkCount: allChunks.length,
     chunks: allChunks.map((chunk, i) => toStoredChunk(chunk, embeddings[i])),
@@ -340,6 +367,13 @@ export async function buildIndex() {
 export async function incrementalUpdate() {
   const meta = loadMeta();
   const index = loadIndex();
+  // Claude Opus 5.5, 2026-10-29: a model change makes every stored vector stale; rebuild in
+  // full instead of mixing two models' vectors in one index.
+  const config = loadConfig();
+  if (index.chunks.length > 0 && modelMismatch(index, config)) {
+    console.log(`[neuron] ${modelMismatch(index, config)} Rebuilding.`);
+    return buildIndex();
+  }
   const files = findMarkdownFiles();
 
   // Find files that have changed
@@ -367,7 +401,7 @@ export async function incrementalUpdate() {
   }
 
   if (newChunks.length > 0) {
-    const texts = newChunks.map(c => `${c.heading}: ${c.text}`);
+    const texts = newChunks.map(c => docText(c, config));
     const embeddings = await batchEmbed(texts);
 
     for (let i = 0; i < newChunks.length; i++) {
@@ -376,6 +410,7 @@ export async function incrementalUpdate() {
   }
 
   index.builtAt = new Date().toISOString();
+  index.embedModel = config.embed?.model;
   index.chunkCount = index.chunks.length;
   saveIndex(index);
 
@@ -407,10 +442,12 @@ export async function search(query, topK = 5) {
     return [];
   }
 
+  const mismatch = modelMismatch(index);
+  if (mismatch) console.warn(`[neuron] Warning: ${mismatch}`);
   console.log(`[neuron] Searching ${index.chunks.length} chunks for: "${query}"\n`);
 
   // Embed the query
-  const [queryEmbedding] = await embed(query);
+  const [queryEmbedding] = await embed(queryText(query));
 
   // Score all chunks (fail-closed: verified only, never CONFIDENTIAL)
   const results = scoreChunks(index.chunks, queryEmbedding, topK);
@@ -435,7 +472,7 @@ export async function searchQuiet(query, topK = 5) {
   const index = loadIndex();
   if (index.chunks.length === 0) return [];
 
-  const [queryEmbedding] = await embed(query);
+  const [queryEmbedding] = await embed(queryText(query));
 
   // Fail-closed: verified only, never CONFIDENTIAL
   return scoreChunks(index.chunks, queryEmbedding, topK);
@@ -468,7 +505,7 @@ export async function smartSearch(query, topK = 8) {
   const index = loadIndex();
   if (index.chunks.length > 0) {
     try {
-      const [queryEmbedding] = await embed(query);
+      const [queryEmbedding] = await embed(queryText(query));
       // Fail-closed: verified only, never CONFIDENTIAL
       const semanticResults = scoreChunks(index.chunks, queryEmbedding, topK);
 

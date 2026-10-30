@@ -20,7 +20,8 @@ describe('resolveModel', () => {
     expect(() => resolveModel('bogus', 'claude-cli')).toThrow(/Unknown tier/);
   });
   it('resolves the embed tier to the configured embed model', () => {
-    expect(resolveModel('embed', 'claude-cli')).toBe('nomic-embed-text');
+    // Claude Opus 5.5, 2026-10-29: live config moved from nomic-embed-text to embeddinggemma-2.
+    expect(resolveModel('embed', 'claude-cli')).toBe('embeddinggemma-2');
   });
   it('throws on a provider missing from the registry', () => {
     expect(() => resolveModel('compile', 'nonexistent-provider')).toThrow(/missing from models registry/);

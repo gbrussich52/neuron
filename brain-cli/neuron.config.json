@@ -32,8 +32,11 @@
   "embed": {
     "provider": "openai-compatible",
     "base_url": "http://localhost:11434/v1",
-    "model": "nomic-embed-text",
-    "dimensions": 768
+    "model": "embeddinggemma-2",
+    "dimensions": 768,
+    "doc_template": "title: {title} | text: {text}",
+    "query_prefix": "task: search result | query: ",
+    "_note": "Claude Opus 5.5, 2026-10-29: was nomic-embed-text with no prompts. embeddinggemma-2 with its model-card prompts won a 150-query eval (MRR 0.678 vs 0.628)."
   },
 
   "features": {
