@@ -149,6 +149,9 @@ function findMarkdownFiles() {
     join(KB_DIR, 'wiki', 'queries'),
     join(KB_DIR, 'wiki', 'sessions'),
     join(KB_DIR, 'memory'),
+    // Claude Opus 5.5, 2026-10-30: index project notes too (Giani asked). They still pass the
+    // verified-only read filter, so a note shows in search only once it carries trust: verified.
+    join(KB_DIR, 'Projects'),
   ];
 
   const files = [];
