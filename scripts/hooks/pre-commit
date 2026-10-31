@@ -7,7 +7,12 @@
 set -uo pipefail
 
 KB_DIR="$(git rev-parse --show-toplevel)"
-NEURON_BIN="${NEURON_BIN:-neuron}"
+# Claude Opus 5.5, 2026-10-31: fall back to brain.js by absolute path. A bare `neuron`
+# is not on PATH in any shell, so trust stamping was silently skipped on every run.
+if [ -z "${NEURON_BIN:-}" ]; then
+  if command -v neuron >/dev/null 2>&1; then NEURON_BIN=neuron
+  else NEURON_BIN="node $HOME/project-claude/llm-knowledge-base/brain-cli/brain.js"; fi
+fi
 BLOCK=0
 
 STAGED=$(git diff --cached --name-only --diff-filter=ACM)

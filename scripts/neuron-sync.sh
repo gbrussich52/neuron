@@ -14,7 +14,12 @@ mkdir -p .neuron
 FLAGS="$KB_DIR/.neuron/flags.jsonl"
 LOCKDIR="$KB_DIR/.neuron/sync.lock"
 AUTHOR="${NEURON_AUTHOR:-giani}"
-NEURON_BIN="${NEURON_BIN:-neuron}"
+# Claude Opus 5.5, 2026-10-31: fall back to brain.js by absolute path. A bare `neuron`
+# is not on PATH in any shell, so trust stamping was silently skipped on every run.
+if [ -z "${NEURON_BIN:-}" ]; then
+  if command -v neuron >/dev/null 2>&1; then NEURON_BIN=neuron
+  else NEURON_BIN="node $HOME/project-claude/llm-knowledge-base/brain-cli/brain.js"; fi
+fi
 
 log()  { echo "[neuron-sync] $*"; }
 
